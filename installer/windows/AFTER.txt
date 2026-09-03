@@ -1,0 +1,13 @@
+Simple Deck został zainstalowany pomyślnie!
+
+Następne kroki:
+
+  1. Podłącz urządzenie GREJEM Stream Deck przez USB-C
+  2. Uruchom aplikację Simple Deck ze skrótu na pulpicie lub z menu Start
+  3. Status "● Połączony" w prawym górnym rogu oznacza połączenie z MCU
+  4. Skonfiguruj profile w zakładce "Potencjometry" i "Przyciski"
+
+Wsparcie i aktualizacje:
+  https://github.com/grejem-industries/grejem-os
+
+Dziękujemy za wybór GREJEM INDUSTRIES!

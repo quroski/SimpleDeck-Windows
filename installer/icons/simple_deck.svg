@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- ============================================================================
+  Simple Deck - logo / ikona aplikacji
+  Sygatura: heksagonalny "deck" z neonowym akcentem cyan→magenta.
+  ============================================================================ -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <defs>
+    <!-- Tło - głęboki gradient szafiru -->
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0E0E14"/>
+      <stop offset="100%" stop-color="#1A1A2A"/>
+    </linearGradient>
+    <!-- Gradient neonowy hexa -->
+    <linearGradient id="hexStroke" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#2DD4FF"/>
+      <stop offset="50%" stop-color="#9B5CFF"/>
+      <stop offset="100%" stop-color="#FF2EC4"/>
+    </linearGradient>
+    <!-- Poświata -->
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="4" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <!-- Gloss highlight - subtelny refleks światła u góry -->
+    <linearGradient id="gloss" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.15"/>
+      <stop offset="50%" stop-color="#FFFFFF" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Tło z zaokrąglonymi rogami (app icon squircle) -->
+  <rect width="256" height="256" rx="56" ry="56" fill="url(#bg)"/>
+  <!-- Gloss overlay -->
+  <rect width="256" height="128" rx="56" ry="56" fill="url(#gloss)"/>
+
+  <!-- Zewnętrzny heks z poświatą -->
+  <polygon points="128,36 204,80 204,176 128,220 52,176 52,80"
+           fill="none" stroke="url(#hexStroke)" stroke-width="3"
+           opacity="0.4" filter="url(#glow)"/>
+
+  <!-- Główny heks -->
+  <polygon points="128,52 188,87 188,169 128,204 68,169 68,87"
+           fill="none" stroke="url(#hexStroke)" stroke-width="6"
+           stroke-linejoin="round"/>
+
+  <!-- Wewnętrzny okrąg = "LED" / centralny control -->
+  <circle cx="128" cy="128" r="32" fill="none"
+          stroke="#2DD4FF" stroke-width="2" opacity="0.6"/>
+  <circle cx="128" cy="128" r="20" fill="#2DD4FF" opacity="0.9"
+          filter="url(#glow)"/>
+
+  <!-- Wskaźniki pokręteł (lewa i prawa strona hexa) -->
+  <g opacity="0.85">
+    <rect x="40" y="120" width="14" height="6" rx="2" fill="#2DD4FF"/>
+    <rect x="40" y="130" width="14" height="6" rx="2" fill="#2DD4FF" opacity="0.6"/>
+    <rect x="202" y="120" width="14" height="6" rx="2" fill="#FF2EC4"/>
+    <rect x="202" y="130" width="14" height="6" rx="2" fill="#FF2EC4" opacity="0.6"/>
+  </g>
+
+  <!-- 4 kropki na dole = przyciski -->
+  <g fill="#9B5CFF" opacity="0.85">
+    <circle cx="100" cy="220" r="4"/>
+    <circle cx="118" cy="220" r="4"/>
+    <circle cx="138" cy="220" r="4"/>
+    <circle cx="156" cy="220" r="4"/>
+  </g>
+</svg>

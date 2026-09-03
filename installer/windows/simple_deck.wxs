@@ -1,0 +1,321 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  ============================================================================
+    Simple Deck - WiX source  (v3 schema; auto-converted to v4 by build.ps1)
+   ============================================================================
+    Buduje instalator .msi dla Windows 10/11 x64.
+
+    Pliku tego NIE edytuj ręcznie pod kątem listy plików aplikacji — lista jest
+    generowana automatycznie przez `heat` do `simple_deck_heat.wxs` na podstawie
+    folderu dist/Simple-Deck/ (wyplutego przez PyInstaller). Tu są tylko metadane
+    produktu, skróty, wpisy Add/Remove Programs i UI.
+
+    Kompilacja (patrz build.ps1 - pełny pipeline):
+        # WiX v4 (pojedyncza komenda):
+        wix build simple_deck.wxs simple_deck_heat.wxs -o output\Simple-Deck-1.0.0.msi
+
+        # WiX v3 (dwa kroki):
+        candle -out build\ simple_deck.wxs simple_deck_heat.wxs
+        light  -out output\Simple-Deck-1.0.0.msi build\simple_deck.wixobj ^
+               build\simple_deck_heat.wixobj -ext WixUIExtension -ext WixUtilExtension
+
+    STABILNE IDENTYFIKATORY (nie zmieniać między wersjami!):
+      UpgradeCode ........ identyfikator produktu do detekcji major upgrade.
+                          Pozostaje stały przez CAŁE życie produktu.
+      AppId (Inno) ....... oddzielny GUID używany przez instalator .exe.
+                          MSI i EXE to dwa różne produkty z punktu widzenia Windows
+                          (różne ProductCode / UpgradeCode), ale mogą być instalowane
+                          obok siebie bez konfliktu (inna ścieżka rejestru ARP).
+  ============================================================================
+
+  Skróty (shortcuts) - opcjonalne:
+    MSI nie ma checkboxów w kreatorze WixUI_InstallDir (poza skrótem w menu Start,
+    który tworzy się zawsze). Pulpit i autostart sterowane są właściwościami MSI:
+
+        msiexec /i Simple-Deck-1.0.0.msi INSTALLDESKTOP=1 INSTALLAUTOSTART=1
+
+    Domyślnie oba wyłączone (0). Przydatne dla wdrożeń GPO/SCCM.
+  ============================================================================
+-->
+<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
+
+  <!--
+    Wersja - domyślnie 1.0.0. build.ps1 podmienia ją przez -dAppVersion=x.y.z
+    przy każdym buildzie (czytane z desktop/pyproject.toml). Ręczne wywołanie
+    candle/wix bez -d też zadziała - użyje domyślnej.
+  -->
+  <?ifndef var.AppVersion ?>
+  <?define AppVersion = "1.3.0" ?>
+  <?endif?>
+
+  <Product
+      Id="*"
+      Name="Simple Deck"
+      Language="1033"
+      Codepage="1252"
+      Version="$(var.AppVersion)"
+      Manufacturer="GREJEM INDUSTRIES"
+      UpgradeCode="{71BEFB95-F0B6-49EC-9C2F-A3F8C98D3AC7}">
+
+    <!--
+      Id="*"  -> ProductCode generowany na nowo przy każdym buildu (zalecane MSI
+                best-practice: nowa wersja = nowy ProductCode; UpgradeCode stały).
+      Version -> wstrzykiwana przez build.ps1 jako zmienna preprocesora
+                (-dAppVersion=1.0.0). Równie dobrze można podać dosłownie "1.0.0".
+    -->
+
+    <Package
+        Id="*"
+        Keywords="Installer"
+        Description="Simple Deck $(var.AppVersion) Installer"
+        Manufacturer="GREJEM INDUSTRIES"
+        InstallerVersion="500"
+        InstallPrivileges="elevated"
+        InstallScope="perMachine"
+        Languages="1033,1045"
+        Compressed="yes"
+        SummaryCodepage="1252" />
+
+    <!-- Single embedded cabinet (jeden plik .msi, bez zewnętrznych .cab) -->
+    <MediaTemplate EmbedCab="yes" />
+
+    <!--
+      Major upgrade: starsza wersja jest odinstalowywana przed instalacją nowej.
+      AllowSameVersionUpgrades=no -> build-to-build tej samej wersji nie traktuj
+      jako upgrade (wymaga bicia wersji). Downgrade blokowany z komunikatem.
+    -->
+    <MajorUpgrade
+        AllowSameVersionUpgrades="no"
+        Disallow="no"
+        IgnoreRemoveFailure="no"
+        DowngradeErrorMessage="A newer version of Simple Deck is already installed. The installer will now exit." />
+
+    <!-- Wymagaj 64-bitowego Windowsa (PySide6/PyInstaller build jest x64).
+         Installed OR ... -> warunek sprawdzany tylko przy instalacji, nie przy
+         naprawie/modyfikacji już zainstalowanego produktu. -->
+    <Condition Message="Simple Deck requires a 64-bit version of Windows.">
+      <![CDATA[ Installed OR VersionNT64 ]]>
+    </Condition>
+
+    <!--
+      Ikona aplikacji - pokazuje się w Add/Remove Programs.
+      Też używana jako domyślna ikona skrótów.
+    -->
+    <Icon Id="AppIcon.ico" SourceFile="..\icons\simple_deck.ico" />
+    <Property Id="ARPPRODUCTICON" Value="AppIcon.ico" />
+
+    <!-- Wpisy Add/Remove Programs (się same generują z Package/Manufacturer/Version,
+         tu dopełniamy linki i rozmiar) -->
+    <Property Id="ARPHELPLINK"      Value="https://github.com/grejem-industries/grejem-os" />
+    <Property Id="ARPURLINFOABOUT"  Value="https://github.com/grejem-industries/grejem-os" />
+    <Property Id="ARPURLUPDATEINFO" Value="https://github.com/grejem-industries/grejem-os/releases" />
+    <Property Id="ARPCONTACT"       Value="GREJEM INDUSTRIES" />
+    <Property Id="ARPSIZE"          Value="120000" /><!-- ~120 MB w kilobajtach -->
+    <!-- ARPINSTALLMODE -> "Brak informacji o częstości używania" (czyściej) -->
+    <Property Id="ARPINSTALLMODE"   Value="perMachine" />
+
+    <!--
+      Opcjonalne skróty sterowane właściwościami MSI.
+      Domyślnie 0 = wyłączone. Użytkownik włącza z linii komend:
+          msiexec /i Simple-Deck-1.0.0.msi INSTALLDESKTOP=1
+      Secure="yes" wymagane by property przechodziło UI sequence z elevated rights.
+    -->
+    <Property Id="INSTALLDESKTOP"  Value="0" Secure="yes" />
+    <Property Id="INSTALLAUTOSTART" Value="0" Secure="yes" />
+
+    <!-- WixUI_InstallDir musi wiedzieć, którą właściwość-katalog edytować -->
+    <Property Id="WIXUI_INSTALLDIR" Value="APPINSTALLDIR" />
+
+    <!-- ============================================================
+         Struktura katalogów
+         ============================================================ -->
+    <Directory Id="TARGETDIR" Name="SourceDir">
+
+      <!-- Program Files (64-bit) -->
+      <Directory Id="ProgramFiles64Folder" Name="PFiles64">
+        <Directory Id="GREJEMDIR" Name="GREJEM INDUSTRIES">
+          <Directory Id="APPINSTALLDIR" Name="Simple Deck" />
+        </Directory>
+      </Directory>
+
+      <!-- Menu Start -> GREJEM INDUSTRIES -->
+      <Directory Id="ProgramMenuFolder" Name="Programs">
+        <Directory Id="GREJEMMENUDIR" Name="GREJEM INDUSTRIES" />
+      </Directory>
+
+      <!-- Pulpit (opcjonalny skrót) -->
+      <Directory Id="DesktopFolder" Name="Desktop" />
+
+      <!-- Autostart (opcjonalny skrót) -->
+      <Directory Id="StartupFolder" Name="Startup" />
+
+    </Directory>
+
+    <!-- ============================================================
+         Pliki aplikacji
+         ============================================================
+         ComponentGroup "AppFiles" jest generowana przez `heat` (patrz
+         simple_deck_heat.wxs, gitignored, tworzony w build.ps1). heat umieszcza
+         wszystkie komponenty-pliki w <DirectoryRef Id="APPINSTALLDIR">, więc tu
+         nie powtarzamy DirectoryRef - wystarczy referencja w <Feature> poniżej.
+         ============================================================ -->
+
+    <!-- ============================================================
+         Skróty w Menu Start (tworzone ZAWSZE)
+         ============================================================ -->
+    <DirectoryRef Id="GREJEMMENUDIR">
+      <Component Id="StartMenuShortcut" Guid="{F7928B1A-9619-4894-9E5C-FA9CBBEE3CE4}" Win64="yes">
+
+        <Shortcut Id="StartMenuAppShortcut"
+                  Name="Simple Deck"
+                  Description="Simple Deck - Stream Deck Controller"
+                  Target="[APPINSTALLDIR]Simple-Deck.exe"
+                  WorkingDirectory="APPINSTALLDIR"
+                  Icon="AppIcon.ico" />
+
+        <Shortcut Id="StartMenuUninstallShortcut"
+                  Name="Uninstall Simple Deck"
+                  Description="Uninstall Simple Deck"
+                  Target="[System64Folder]msiexec.exe"
+                  Arguments="/x [ProductCode]"
+                  Icon="AppIcon.ico" />
+
+        <!-- Component musi mieć KeyPath - używamy wpisu rejestru (krótsza ścieżka
+             niż plik, stabilna między wersjami). -->
+        <RegistryValue Root="HKMU"
+                       Key="SOFTWARE\GREJEM INDUSTRIES\Simple Deck"
+                       Name="StartMenuShortcut"
+                       Type="integer"
+                       Value="1"
+                       KeyPath="yes" />
+
+        <!-- Posprzątanie folderu wydawcy przy deinstalacji (jeśli pusty) -->
+        <RemoveFolder Id="RemoveGREJEMMENUDIR" Directory="GREJEMMENUDIR" On="uninstall" />
+      </Component>
+    </DirectoryRef>
+
+    <!-- ============================================================
+         Skrót na Pulpicie (opcjonalny - INSTALLDESKTOP=1)
+         ============================================================ -->
+    <DirectoryRef Id="DesktopFolder">
+      <Component Id="DesktopShortcut" Guid="{A4A12A8D-5D3B-4894-A684-73C676193379}" Win64="yes">
+        <Condition>INSTALLDESKTOP = 1</Condition>
+
+        <Shortcut Id="DesktopAppShortcut"
+                  Name="Simple Deck"
+                  Description="Simple Deck - Stream Deck Controller"
+                  Target="[APPINSTALLDIR]Simple-Deck.exe"
+                  WorkingDirectory="APPINSTALLDIR"
+                  Icon="AppIcon.ico" />
+
+        <RegistryValue Root="HKMU"
+                       Key="SOFTWARE\GREJEM INDUSTRIES\Simple Deck"
+                       Name="DesktopShortcut"
+                       Type="integer"
+                       Value="1"
+                       KeyPath="yes" />
+      </Component>
+    </DirectoryRef>
+
+    <!-- ============================================================
+         Skrót w Autostarcie (opcjonalny - INSTALLAUTOSTART=1)
+         ============================================================ -->
+    <DirectoryRef Id="StartupFolder">
+      <Component Id="AutostartShortcut" Guid="{DF999DCD-D795-4A7D-85B5-019445D14B9B}" Win64="yes">
+        <Condition>INSTALLAUTOSTART = 1</Condition>
+
+        <Shortcut Id="AutostartAppShortcut"
+                  Name="Simple Deck"
+                  Description="Simple Deck"
+                  Target="[APPINSTALLDIR]Simple-Deck.exe"
+                  WorkingDirectory="APPINSTALLDIR"
+                  Icon="AppIcon.ico" />
+
+        <RegistryValue Root="HKMU"
+                       Key="SOFTWARE\GREJEM INDUSTRIES\Simple Deck"
+                       Name="AutostartShortcut"
+                       Type="integer"
+                       Value="1"
+                       KeyPath="yes" />
+      </Component>
+    </DirectoryRef>
+
+    <!-- ============================================================
+         Wpis rejestru z informacjami o instalacji (dopełnia ARP)
+         ============================================================ -->
+    <DirectoryRef Id="APPINSTALLDIR">
+      <Component Id="RegistryInstallInfo" Guid="{18282B15-4C97-468A-B8B9-F06A21A765BC}" Win64="yes">
+        <RegistryValue Root="HKMU"
+                       Key="SOFTWARE\GREJEM INDUSTRIES\Simple Deck"
+                       Name="InstallPath"
+                       Type="string"
+                       Value="[APPINSTALLDIR]"
+                       KeyPath="yes" />
+        <RegistryValue Root="HKMU"
+                       Key="SOFTWARE\GREJEM INDUSTRIES\Simple Deck"
+                       Name="Version"
+                       Type="string"
+                       Value="$(var.AppVersion)" />
+        <!-- Posprzątanie nadrzędnego klucza "GREJEM INDUSTRIES" jeśli pusty -->
+        <RemoveRegistryKey Id="RemoveGrejemParentKey"
+                           Root="HKMU"
+                           Key="SOFTWARE\GREJEM INDUSTRIES"
+                           Action="removeOnUninstall" />
+      </Component>
+    </DirectoryRef>
+
+    <!-- ============================================================
+         Feature tree - jedna cecha "Complete" (po prostu zainstaluj wszystko)
+         ============================================================ -->
+    <Feature Id="Complete"
+             Title="Simple Deck"
+             Description="Complete Simple Deck installation."
+             Level="1"
+             ConfigurableDirectory="APPINSTALLDIR"
+             Display="expand"
+             AllowAdvertise="no"
+             TypicalDefault="install">
+      <ComponentGroupRef Id="AppFiles" />
+      <ComponentRef Id="StartMenuShortcut" />
+      <ComponentRef Id="DesktopShortcut" />
+      <ComponentRef Id="AutostartShortcut" />
+      <ComponentRef Id="RegistryInstallInfo" />
+    </Feature>
+
+    <!-- ============================================================
+         UI - WixUI_InstallDir: Welcome -> Folder -> Progress -> Done
+         (bez okna licencji - license.txt trafia do katalogu instalacyjnego)
+         ============================================================ -->
+    <UIRef Id="WixUI_InstallDir" />
+    <UIRef Id="WixUI_ErrorProgressText" />
+
+    <!--
+      WixUI_InstallDir domyślnie pokazuje EULA. Wyłączamy okno licencji:
+      nadpisujemy sekwencję dialogów, usuwając LicenseAgreementDlg.
+      Alternatywa: dostarczyć WixUI_InstallDir_NoLicense.rtf z pustym tekstem.
+      Najprostsze i skuteczne: przemianuj dialog LicenseAgreementDlg na skip.
+    -->
+    <UI>
+      <!-- Pomiń dialog licencji: przycisk "Next" na Welcome idzie prosto do
+           InstallDirDlg (zamiast do LicenseAgreementDlg). -->
+      <Publish Dialog="WelcomeDlg"
+               Control="Next"
+               Event="NewDialog"
+               Value="InstallDirDlg"
+               Order="2">1</Publish>
+      <Publish Dialog="InstallDirDlg"
+               Control="Back"
+               Event="NewDialog"
+               Value="WelcomeDlg"
+               Order="2">1</Publish>
+    </UI>
+
+    <!-- ============================================================
+         Akcje po instalacji
+         ============================================================ -->
+    <!-- Brak akcji niestandardowych - instalacja jest czystym copy-file.
+         USB HID na Windows nie wymaga sterownika (wbudowany hidclass.sys). -->
+
+  </Product>
+
+</Wix>

@@ -1,0 +1,543 @@
+/* =============================================================================
+ *  Simple Deck - GLOSSY.QSS  (Glassmorphism Dark + Neon)
+ *  GREJEM INDUSTRIES
+ * -----------------------------------------------------------------------------
+ *  Estetyka:
+ *    - Ciemnoszafirnowe tło z subtelnym gradientem (BG_TOP → BG_BOTTOM)
+ *    - Karty "frosted glass": półprzezroczyste, zaokrąglone, 1px obwódka
+ *    - Subtelny gradient świetlny na górze każdej karty (efekt glossy)
+ *    - Neonowe akcenty: cyan #2DD4FF (primary), magenta #FF2EC4 (active)
+ *    - Soft drop shadows (dodawane przez QGraphicsDropShadowEffect w Pythonie)
+ *    - Zaokrąglone rogi, klarowna typografia
+ * ============================================================================= */
+
+/* ============================ GLOBALNE ===================================== */
+* {
+    color: #F5F7FA;
+    font-family: "Inter", "SF Pro Display", "Segoe UI", "DejaVu Sans", sans-serif;
+    font-size: 14px;
+    outline: none;
+}
+
+QWidget#root {
+    background: qlineargradient(x1:0, y1:0, x2:0.4, y2:1,
+                                stop:0 #0E0E14,
+                                stop:0.6 #161624,
+                                stop:1 #1A1A2A);
+}
+
+QWidget {
+    background: transparent;
+}
+
+QToolTip {
+    background: #1A1A2A;
+    color: #F5F7FA;
+    border: 1px solid rgba(45, 212, 255, 100);
+    border-radius: 8px;
+    padding: 6px 10px;
+}
+
+/* ============================ HEADER ======================================= */
+QFrame#header {
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                                stop:0 rgba(40, 44, 64, 220),
+                                stop:0.5 rgba(28, 30, 42, 180),
+                                stop:1 rgba(20, 22, 32, 140));
+    border: 1px solid rgba(255, 255, 255, 22);
+    border-radius: 16px;
+}
+
+QLabel#titleLarge {
+    font-size: 28px;
+    font-weight: 700;
+    color: #F5F7FA;
+    letter-spacing: 1.5px;
+    padding: 0;
+    margin: 0;
+}
+
+QLabel#titleSubtitle {
+    font-size: 11px;
+    font-weight: 400;
+    color: #A5ABC0;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    padding: 0;
+    margin: 0;
+}
+
+QLabel#logo {
+    font-size: 26px;
+    color: #2DD4FF;
+}
+
+/* ============================ SIDEBAR NAV ================================== */
+QFrame#sidebar {
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                                stop:0 rgba(28, 30, 42, 200),
+                                stop:1 rgba(20, 22, 32, 180));
+    border: 1px solid rgba(255, 255, 255, 14);
+    border-radius: 16px;
+}
+
+QPushButton#navItem {
+    border: none;
+    border-radius: 10px;
+    color: #A5ABC0;
+    text-align: left;
+    padding: 12px 18px;
+    font-size: 13px;
+    font-weight: 500;
+    letter-spacing: 0.5px;
+}
+QPushButton#navItem:hover {
+    background: rgba(255, 255, 255, 14);
+    color: #F5F7FA;
+}
+QPushButton#navItem:checked {
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                                stop:0 rgba(45, 212, 255, 50),
+                                stop:1 rgba(45, 212, 255, 20));
+    border-left: 3px solid #2DD4FF;
+    color: #F5F7FA;
+}
+
+/* ============================ KARTY / PANELE ============================== */
+QFrame#card {
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                                stop:0 rgba(255, 255, 255, 22),  /* gloss na górze */
+                                stop:0.08 rgba(255, 255, 255, 6),
+                                stop:0.08 rgba(28, 30, 42, 200), /* glass body */
+                                stop:1 rgba(20, 22, 32, 200));
+    border: 1px solid rgba(255, 255, 255, 18);
+    border-radius: 18px;
+}
+QFrame#card:hover {
+    border: 1px solid rgba(45, 212, 255, 40);
+}
+
+/* V4: Cyfrowy badge numeru potencjometru (koło, akcent) */
+QLabel#potBadge {
+    background: qradialgradient(cx:0.35, cy:0.35, radius:0.8,
+                                stop:0 #48E0FF, stop:0.6 #2DD4FF, stop:1 #1A9FCC);
+    color: #0D0F17;
+    font-size: 17px;
+    font-weight: 700;
+    border-radius: 18px;
+}
+
+QFrame#cardGlow {
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                                stop:0 rgba(45, 212, 255, 30),
+                                stop:0.08 rgba(45, 212, 255, 8),
+                                stop:0.08 rgba(28, 30, 42, 200),
+                                stop:1 rgba(20, 22, 32, 200));
+    border: 1px solid rgba(45, 212, 255, 100);
+    border-radius: 18px;
+}
+
+QFrame#cardSubtle {
+    background: rgba(255, 255, 255, 8);
+    border: 1px solid rgba(255, 255, 255, 12);
+    border-radius: 12px;
+}
+
+/* ============================ LABELS ====================================== */
+QLabel {
+    color: #F5F7FA;
+}
+QLabel#sectionTitle {
+    font-size: 18px;
+    font-weight: 600;
+    color: #F5F7FA;
+    letter-spacing: 0.5px;
+}
+QLabel#sectionSubtitle {
+    font-size: 12px;
+    color: #A5ABC0;
+    font-weight: 400;
+}
+QLabel#labelMuted {
+    color: #6A7080;
+    font-size: 11px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+}
+QLabel#labelValue {
+    color: #2DD4FF;
+    font-size: 16px;
+    font-weight: 600;
+    font-family: "JetBrains Mono", "Consolas", monospace;
+}
+QLabel#labelLarge {
+    font-size: 22px;
+    font-weight: 700;
+}
+QLabel#labelTiny {
+    font-size: 10px;
+    color: #6A7080;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+}
+
+/* ============================ PRZYCISKI ================================== */
+QPushButton {
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                                stop:0 rgba(60, 64, 88, 200),
+                                stop:1 rgba(40, 44, 64, 200));
+    border: 1px solid rgba(255, 255, 255, 22);
+    border-radius: 10px;
+    color: #F5F7FA;
+    padding: 8px 16px;
+    font-weight: 500;
+}
+QPushButton:hover {
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                                stop:0 rgba(80, 84, 110, 220),
+                                stop:1 rgba(50, 54, 78, 220));
+    border: 1px solid rgba(255, 255, 255, 40);
+}
+QPushButton:pressed {
+    background: rgba(28, 30, 42, 240);
+}
+QPushButton:disabled {
+    color: #6A7080;
+    background: rgba(28, 30, 42, 120);
+    border-color: rgba(255, 255, 255, 8);
+}
+
+QPushButton#primaryBtn {
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                                stop:0 rgba(45, 212, 255, 200),
+                                stop:0.5 rgba(45, 212, 255, 140),
+                                stop:1 rgba(45, 212, 255, 80));
+    border: 1px solid rgba(45, 212, 255, 220);
+    color: #0E0E14;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+}
+QPushButton#primaryBtn:hover {
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                                stop:0 rgba(45, 212, 255, 230),
+                                stop:0.5 rgba(45, 212, 255, 170),
+                                stop:1 rgba(45, 212, 255, 100));
+    border: 1px solid #2DD4FF;
+}
+QPushButton#primaryBtn:pressed {
+    background: rgba(45, 212, 255, 180);
+}
+
+QPushButton#magentaBtn {
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                                stop:0 rgba(255, 46, 196, 180),
+                                stop:1 rgba(255, 46, 196, 80));
+    border: 1px solid rgba(255, 46, 196, 220);
+    color: #F5F7FA;
+    font-weight: 600;
+}
+
+QPushButton#dangerBtn {
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                                stop:0 rgba(255, 92, 108, 180),
+                                stop:1 rgba(255, 92, 108, 80));
+    border: 1px solid rgba(255, 92, 108, 220);
+    color: #F5F7FA;
+}
+
+QPushButton#iconBtn {
+    background: transparent;
+    border: none;
+    color: #A5ABC0;
+    padding: 6px;
+    font-size: 16px;
+}
+QPushButton#iconBtn:hover {
+    color: #F5F7FA;
+}
+
+/* ============================ SCROLLAREA ================================= */
+QScrollArea {
+    background: transparent;
+    border: none;
+}
+QScrollArea > QWidget > QWidget {
+    background: transparent;
+}
+/* V1.3.4: handle alpha 30 → 110 i szerokość 10 → 12 — poprzednio pasek był
+   praktycznie niewidoczny na ciemnym tle (user nie wiedział że jest scroll). */
+QScrollBar:vertical {
+    background: transparent;
+    width: 12px;
+    margin: 6px 2px;
+}
+QScrollBar::handle:vertical {
+    background: rgba(255, 255, 255, 110);
+    border-radius: 4px;
+    min-height: 30px;
+}
+QScrollBar::handle:vertical:hover {
+    background: rgba(255, 255, 255, 170);
+}
+QScrollBar::add-line:vertical,
+QScrollBar::sub-line:vertical { height: 0; }
+QScrollBar:horizontal { height: 0; }
+/* V1.3.4: widoczny uchwyt resize okna (prawy dolny róg) */
+QSizeGrip {
+    background: transparent;
+}
+
+/* ============================ TABWIDGET =================================== */
+/* V1.3.4: Ustawienia na zakładkach — styl spójny z glassmorphism. */
+QTabWidget::pane {
+    border: 1px solid #2A2D3A;
+    border-radius: 12px;
+    background: rgba(28, 30, 42, 120);
+}
+QTabBar::tab {
+    background: rgba(28, 30, 42, 140);
+    color: #A5ABC0;
+    padding: 8px 18px;
+    margin-right: 4px;
+    border: 1px solid #2A2D3A;
+    border-bottom: none;
+    border-top-left-radius: 8px;
+    border-top-right-radius: 8px;
+    font-size: 13px;
+}
+QTabBar::tab:hover {
+    color: #F5F7FA;
+    background: rgba(42, 45, 58, 200);
+}
+QTabBar::tab:selected {
+    color: #F5F7FA;
+    background: rgba(28, 30, 42, 220);
+    border-bottom: 2px solid #2DD4FF;
+}
+
+/* ============================ COMBOBOX ==================================== */
+QComboBox {
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                                stop:0 rgba(40, 44, 64, 220),
+                                stop:1 rgba(28, 30, 42, 220));
+    border: 1px solid rgba(255, 255, 255, 18);
+    border-radius: 10px;
+    padding: 8px 14px;
+    color: #F5F7FA;
+    min-height: 22px;
+}
+QComboBox:hover {
+    border: 1px solid rgba(45, 212, 255, 100);
+}
+QComboBox::drop-down {
+    border: none;
+    width: 28px;
+}
+QComboBox::down-arrow {
+    image: none;
+    border-left: 4px solid transparent;
+    border-right: 4px solid transparent;
+    border-top: 5px solid #A5ABC0;
+    margin-right: 10px;
+}
+QComboBox::down-arrow:hover { border-top-color: #2DD4FF; }
+QComboBox QAbstractItemView {
+    background: #1A1A2A;
+    border: 1px solid rgba(45, 212, 255, 80);
+    border-radius: 8px;
+    padding: 6px;
+    selection-background-color: rgba(45, 212, 255, 60);
+    outline: none;
+}
+
+/* ============================ LINEEDIT =================================== */
+QLineEdit {
+    background: rgba(255, 255, 255, 6);
+    border: 1px solid rgba(255, 255, 255, 18);
+    border-radius: 8px;
+    padding: 8px 12px;
+    color: #F5F7FA;
+    selection-background-color: rgba(45, 212, 255, 100);
+}
+QLineEdit:focus {
+    border: 1px solid rgba(45, 212, 255, 180);
+    background: rgba(45, 212, 255, 14);
+}
+QLineEdit:disabled {
+    color: #6A7080;
+}
+
+/* ============================ SLIDER ===================================== */
+QSlider::groove:horizontal {
+    height: 6px;
+    background: rgba(255, 255, 255, 24);
+    border-radius: 3px;
+}
+QSlider::sub-page:horizontal {
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                                stop:0 #2DD4FF, stop:1 #9B5CFF);
+    border-radius: 3px;
+}
+QSlider::handle:horizontal {
+    background: qradialgradient(cx:0.5, cy:0.5, radius:0.6,
+                                fx:0.5, fy:0.4,
+                                stop:0 #FFFFFF, stop:0.6 #2DD4FF, stop:1 #1B8FB0);
+    width: 16px;
+    height: 16px;
+    margin: -6px 0;
+    border-radius: 8px;
+    border: 1px solid rgba(255, 255, 255, 100);
+}
+QSlider::handle:horizontal:hover {
+    background: qradialgradient(cx:0.5, cy:0.5, radius:0.7,
+                                fx:0.5, fy:0.4,
+                                stop:0 #FFFFFF, stop:0.5 #2DD4FF, stop:1 #2DD4FF);
+    width: 18px;
+    height: 18px;
+    margin: -7px 0;
+    border-radius: 9px;
+}
+
+/* ============================ CHECKBOX =================================== */
+QCheckBox {
+    spacing: 8px;
+    color: #F5F7FA;
+}
+QCheckBox::indicator {
+    width: 18px;
+    height: 18px;
+    border-radius: 5px;
+    border: 1px solid rgba(255, 255, 255, 40);
+    background: rgba(255, 255, 255, 6);
+}
+QCheckBox::indicator:hover {
+    border: 1px solid rgba(45, 212, 255, 120);
+}
+QCheckBox::indicator:checked {
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                                stop:0 #2DD4FF, stop:1 #1B8FB0);
+    border: 1px solid #2DD4FF;
+    image: none;
+}
+
+/* ============================ STATUS DOT ================================= */
+QLabel#statusDot {
+    background: #3CFFB0;
+    border-radius: 5px;
+    min-width: 10px;
+    max-width: 10px;
+    min-height: 10px;
+    max-height: 10px;
+}
+QLabel#statusDot[state="connected"]    { background: #3CFFB0; }
+QLabel#statusDot[state="connecting"]   { background: #FFB13C; }
+QLabel#statusDot[state="reconnecting"] { background: #9B5CFF; }
+QLabel#statusDot[state="disconnected"] { background: #FF5C6C; }
+
+/* ============================ DECK MAP (wizualizacja) ==================== */
+QFrame#deckCell {
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                                stop:0 rgba(255, 255, 255, 22),
+                                stop:0.08 rgba(255, 255, 255, 6),
+                                stop:0.08 rgba(36, 38, 52, 220),
+                                stop:1 rgba(24, 26, 38, 220));
+    border: 1px solid rgba(255, 255, 255, 22);
+    border-radius: 14px;
+}
+QFrame#deckCell[selected="true"] {
+    border: 1px solid #2DD4FF;
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                                stop:0 rgba(45, 212, 255, 40),
+                                stop:0.08 rgba(45, 212, 255, 14),
+                                stop:0.08 rgba(28, 38, 56, 220),
+                                stop:1 rgba(20, 28, 42, 220));
+}
+QFrame#deckCell:hover {
+    border: 1px solid rgba(45, 212, 255, 120);
+}
+
+QLabel#deckCellTitle {
+    font-size: 10px;
+    color: #6A7080;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    background: transparent;
+}
+QLabel#deckCellValue {
+    font-size: 18px;
+    font-weight: 700;
+    color: #2DD4FF;
+    font-family: "JetBrains Mono", "Consolas", monospace;
+    background: transparent;
+}
+
+/* ============================ PRZYCISK DECKA (klikalna komórka) ========== */
+QPushButton#deckButton {
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                                stop:0 rgba(255, 255, 255, 26),
+                                stop:0.15 rgba(255, 255, 255, 8),
+                                stop:0.15 rgba(36, 38, 52, 220),
+                                stop:1 rgba(24, 26, 38, 220));
+    border: 1px solid rgba(255, 255, 255, 24);
+    border-radius: 14px;
+    font-size: 12px;
+    color: #F5F7FA;
+    padding: 16px;
+}
+QPushButton#deckButton:pressed,
+QPushButton#deckButton:checked,
+QPushButton#deckButton[pressed="true"] {
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                                stop:0 rgba(45, 212, 255, 80),
+                                stop:0.15 rgba(45, 212, 255, 20),
+                                stop:0.15 rgba(28, 38, 56, 220),
+                                stop:1 rgba(20, 28, 42, 220));
+    border: 1px solid #2DD4FF;
+}
+
+/* ============================ LED DOT ==================================== */
+QLabel#ledDot {
+    background: rgba(255, 255, 255, 16);
+    border-radius: 9px;
+    min-width: 18px;
+    max-width: 18px;
+    min-height: 18px;
+    max-height: 18px;
+}
+QLabel#ledDot[mode="on"]        { background: qradialgradient(cx:0.5, cy:0.4, radius:0.5, stop:0 #FFFFFF, stop:0.4 #3CFFB0, stop:1 #1B8F6A); }
+QLabel#ledDot[mode="blink"]     { background: qradialgradient(cx:0.5, cy:0.4, radius:0.5, stop:0 #FFFFFF, stop:0.4 #FFB13C, stop:1 #8F6A1B); }
+QLabel#ledDot[mode="off"]       { background: rgba(255, 255, 255, 16); }
+/* C10: nowe tryby LED */
+QLabel#ledDot[mode="dim"]       { background: qradialgradient(cx:0.5, cy:0.4, radius:0.5, stop:0 rgba(60,255,176,120), stop:0.5 rgba(60,255,176,40), stop:1 rgba(27,143,106,20)); }
+QLabel#ledDot[mode="pulse"]     { background: qradialgradient(cx:0.5, cy:0.4, radius:0.5, stop:0 #FFFFFF, stop:0.4 #2DD4FF, stop:1 #1478A0); }
+QLabel#ledDot[mode="breathe"]   { background: qradialgradient(cx:0.5, cy:0.4, radius:0.5, stop:0 #FFFFFF, stop:0.4 #9B5CFF, stop:1 #4A2D8F); }
+QLabel#ledDot[mode="strobe"]    { background: qradialgradient(cx:0.5, cy:0.4, radius:0.5, stop:0 #FFFFFF, stop:0.4 #FFEC3C, stop:1 #8F8A1B); }
+QLabel#ledDot[mode="heartbeat"] { background: qradialgradient(cx:0.5, cy:0.4, radius:0.5, stop:0 #FFFFFF, stop:0.4 #FF3C5C, stop:1 #8F1B2D); }
+QLabel#ledDot[mode="coupled"]   { background: qradialgradient(cx:0.5, cy:0.4, radius:0.5, stop:0 #FFFFFF, stop:0.4 #5C8FFF, stop:1 #1B3A8F); }
+
+/* ============================ SPINBOX / GROUP ============================ */
+QGroupBox {
+    background: rgba(255, 255, 255, 4);
+    border: 1px solid rgba(255, 255, 255, 14);
+    border-radius: 12px;
+    margin-top: 16px;
+    padding-top: 14px;
+}
+QGroupBox::title {
+    subcontrol-origin: margin;
+    subcontrol-position: top left;
+    padding: 0 8px;
+    color: #2DD4FF;
+    font-weight: 600;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    font-size: 11px;
+}
+
+/* ============================ SEPARATOR ================================== */
+QFrame#hLine {
+    background: rgba(255, 255, 255, 18);
+    max-height: 1px;
+    min-height: 1px;
+    border: none;
+}

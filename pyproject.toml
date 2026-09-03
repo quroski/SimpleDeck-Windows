@@ -1,0 +1,43 @@
+[build-system]
+requires = ["setuptools>=64", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "simple-deck"
+version = "1.3.4"
+description = "Simple Deck - aplikacja kontrolna dla urządzenia GREJEM Stream Deck"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "GREJEM INDUSTRIES" }]
+keywords = ["stream-deck", "hid", "stm32", "pySide6", "glossy-ui"]
+
+dependencies = [
+    "PySide6>=6.5",
+    "hidapi>=0.14",
+]
+
+[project.optional-dependencies]
+# Audio + window detection specyficzne dla Windows
+windows = ["pycaw>=20230405", "pywin32>=306"]
+dev = ["pytest>=7.0", "pytest-qt>=4.2", "pytest-cov>=4.0"]
+
+[project.scripts]
+simple-deck = "simple_deck.__main__:main"
+
+[project.gui-scripts]
+simple-deck-gui = "simple_deck.__main__:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+simple_deck = ["../../assets/**/*.qss", "../../assets/**/*.svg", "../../assets/**/*.png", "../../assets/**/*.ttf"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-v"
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"

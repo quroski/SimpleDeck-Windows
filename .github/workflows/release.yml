@@ -1,0 +1,130 @@
+# ============================================================================
+#  Simple Deck - Release CI
+#  ----------------------------------------------------------------------------
+#  Buduje instalator .exe (Inno Setup) na Windows runner i tworzy GitHub Release.
+#
+#  Wyzwalacze:
+#    1. Push tagu v* (np. v1.3.1)  -> automatyczny build + release
+#    2. workflow_dispatch           -> manualny build podanej wersji
+#
+#  Historia MSI: build.ps1 probowal budowac tez .msi przez WiX Toolset,
+#  ale WiX v4+ usunelo subkomende 'heat' z CLI (celowe - monetyzacja przez
+#  HeatWave Build Tools). MSI wymagaloby rekompilacji build.ps1 pod nowa
+#  skladnie WiX v5+ lub recznego authoring .wxs. Na potrzeby desktop app
+#  Inno Setup .exe jest w zupelnej wystarczalnosci.
+#
+#  Interakcja z lokalnym CLI (scripts/release.py):
+#    - Lokalny release.py (--ci) pushuje TYLKO tag; ten workflow buduje
+#      i tworzy release w chmurze.
+# ============================================================================
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Wersja do zbudowania (bez prefixu v, np. 1.3.1)'
+        required: true
+        default: '1.3.1'
+      prerelease:
+        description: 'Oznacz release jako pre-release (beta)'
+        type: boolean
+        required: false
+        default: false
+
+permissions:
+  contents: write   # wymagane przez gh release create / upload
+
+jobs:
+  build-and-release:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Inno Setup 6
+        shell: pwsh
+        run: |
+          # 'upgrade' is idempotent: installs if missing, no-op if newer present.
+          # windows-latest image ships InnoSetup preinstalled (currently 6.7.1).
+          choco upgrade innosetup -y --no-progress
+          echo "C:\Program Files (x86)\Inno Setup 6" >> $env:GITHUB_PATH
+
+      - name: Resolve version
+        id: ver
+        shell: pwsh
+        run: |
+          if ("${{ github.event_name }}" -eq "workflow_dispatch") {
+            $version = "${{ inputs.version }}"
+          } else {
+            # Tag push: usun prefix 'v'
+            $version = "${{ github.ref_name }}" -replace '^v', ''
+          }
+          Write-Host "Version: $version"
+          echo "version=$version" >> $env:GITHUB_OUTPUT
+          echo "tag=v$version" >> $env:GITHUB_OUTPUT
+
+      - name: Build installer (.exe)
+        shell: pwsh
+        run: |
+          Set-Location installer\windows
+          # -SkipMsi: WiX v4+ nie ma 'heat' CLI; .msi wymagalby rekompilacji build.ps1.
+          # Inno Setup .exe jest wystarczajacy dla userskiego desktop app.
+          & .\build.ps1 -SkipMsi
+
+      - name: Verify artifacts
+        shell: pwsh
+        run: |
+          $v = "${{ steps.ver.outputs.version }}"
+          $exe = "installer\windows\output\Simple-Deck-Setup-$v.exe"
+          if (-not (Test-Path $exe)) {
+            throw "Brak artefaktu: $exe"
+          }
+          $sz = [math]::Round((Get-Item $exe).Length / 1MB, 1)
+          Write-Host "OK: $exe ($sz MB)"
+
+      - name: Create or update GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: pwsh
+        run: |
+          $tag = "${{ steps.ver.outputs.tag }}"
+          $v = "${{ steps.ver.outputs.version }}"
+          $exe = "installer\windows\output\Simple-Deck-Setup-$v.exe"
+          $title = "Simple Deck v$v"
+
+          # Czy release juz istnieje? (np. utworzony przez lokalny release.py)
+          $existing = $false
+          try {
+            gh release view $tag 2>$null
+            if ($LASTEXITCODE -eq 0) { $existing = $true }
+          } catch { }
+
+          if ($existing) {
+            Write-Host "Release $tag juz istnieje - upload artefaktow (--clobber)."
+            gh release upload $tag $exe --clobber
+          } else {
+            Write-Host "Tworze nowy release $tag."
+            # Argumenty budujemy jako tablica i warunkowo dolaczamy --prerelease.
+            # NIE wolno przekazywac pustego stringu jako argumentu (`$preFlag` "")
+            # - gh traktuje go jako pozycyjny arg i pada: "no matches found for ''".
+            $ghArgs = @("release", "create", $tag, $exe,
+                        "--title", $title, "--generate-notes")
+            if ("${{ inputs.prerelease }}" -eq "true") {
+              $ghArgs += "--prerelease"
+              Write-Host "  (oznaczony jako PRE-RELEASE)"
+            }
+            gh @ghArgs
+          }
+
+          # Wyswietl URL
+          gh release view $tag --json url --jq .url

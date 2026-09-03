@@ -1,0 +1,19 @@
+Witamy w kreatorze instalacji Simple Deck!
+
+Simple Deck to aplikacja kontrolna dla urządzenia GREJEM Stream Deck
+(opartego na mikrokontrolerze STM32F103C6T6, łączącym się z PC przez USB-C).
+
+Funkcje:
+  - Auto-reconnect USB HID - aplikacja nigdy się nie zawiesza
+  - Adaptacyjny filtr potencjometrów (EMA + deadband)
+  - Kontrola głośności systemowej i per-proces (WASAPI)
+  - Symulacja skrótów klawiszowych (SendInput)
+  - Profile auto-przełączane wg aktywnej aplikacji
+  - Interfejs w stylu Glassmorphism
+
+Wymagania sprzętowe:
+  - Windows 10 x64 lub nowszy
+  - Połączenie USB-C z urządzeniem GREJEM Stream Deck
+  - 200 MB wolnego miejsca na dysku
+
+Grejem Industries życzy udanej instalacji!
