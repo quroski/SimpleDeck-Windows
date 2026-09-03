@@ -26,7 +26,14 @@ block_cipher = None
 # na PySide6 który zbiera tylko potrzebne submoduły na podstawie imports.
 #
 # ctypes.macholib jest macOS-only - usunięto (m).
-hiddenimports = ["hid", "ctypes.wintypes"]
+hiddenimports = [
+    "hid",
+    "ctypes.wintypes",
+    # single_instance.py używa QLocalServer/QLocalSocket (IPC do raise okna).
+    # Bez tego PyInstaller nie wykryje importu, bo moduł jest w excludes
+    # opartych na nazwach (added 2026-09-03, fix ModuleNotFoundError po build).
+    "PySide6.QtNetwork",
+]
 
 # Dane nieruchome: QSS, ikony, pluginy Qt (platforms/styles/imageformats)
 datas = []
@@ -69,7 +76,10 @@ a = Analysis(
         "PySide6.QtPdf", "PySide6.QtPdfWidgets",
         "PySide6.QtDataVisualization",
         "PySide6.QtQuick", "PySide6.QtQml", "PySide6.QtTest",
-        "PySide6.QtNetwork", "PySide6.QtSql", "PySide6.QtXml",
+        # UWAGA: QtNetwork NIE może tu być — single_instance.py używa
+        # QLocalServer/QLocalSocket (patrz hiddenimports). Excludes ma
+        # pierwszeństwo przed hiddenimports i wywalałby moduł z builda.
+        "PySide6.QtSql", "PySide6.QtXml",
     ],
     win_no_prefer_redirects=False,
     win_private_assemblies=False,
