@@ -931,6 +931,12 @@ class SettingsPage(QWidget):
         cb_minimize.toggled.connect(self._on_minimize_to_tray_toggled)
         cl.addWidget(cb_minimize)
 
+        cb_start_min = QCheckBox("Uruchom zminimalizowane przy starcie")
+        cb_start_min.setChecked(
+            bool(getattr(self._settings, "start_minimized_to_tray", False)))
+        cb_start_min.toggled.connect(self._on_start_minimized_toggled)
+        cl.addWidget(cb_start_min)
+
         cb_notif = QCheckBox("Pokazuj powiadomienia aplikacji")
         cb_notif.setChecked(bool(getattr(self._settings, "notifications_enabled", True)))
         cb_notif.toggled.connect(self._on_notifications_toggled)
@@ -946,6 +952,10 @@ class SettingsPage(QWidget):
 
     def _on_minimize_to_tray_toggled(self, checked: bool) -> None:
         self._settings.minimize_to_tray_on_close = bool(checked)
+        self._save_settings()
+
+    def _on_start_minimized_toggled(self, checked: bool) -> None:
+        self._settings.start_minimized_to_tray = bool(checked)
         self._save_settings()
 
     def _on_notifications_toggled(self, checked: bool) -> None:

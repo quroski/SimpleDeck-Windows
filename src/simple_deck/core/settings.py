@@ -101,6 +101,8 @@ class Settings:
     # V6: Tray icon — opt-in (domyślnie wyłączone wg preferencji usera)
     show_tray_icon: bool = False
     minimize_to_tray_on_close: bool = False
+    # V9: Start minimized to tray (lub do taskbara gdy tray wyłączony)
+    start_minimized_to_tray: bool = False
     # Powiadomienia toast (info/success/warning/error)
     notifications_enabled: bool = True
     # Ostatnio używany profil (ładowany przy starcie)
@@ -124,6 +126,7 @@ class Settings:
             "last_pot_values": [int(v) for v in self.last_pot_values],
             "show_tray_icon": bool(self.show_tray_icon),
             "minimize_to_tray_on_close": bool(self.minimize_to_tray_on_close),
+            "start_minimized_to_tray": bool(self.start_minimized_to_tray),
             "notifications_enabled": bool(self.notifications_enabled),
             "active_profile": str(self.active_profile),
             "game_apps": [str(a).lower() for a in self.game_apps],
@@ -163,6 +166,7 @@ class Settings:
             last_pot_values=lpv,
             show_tray_icon=bool(d.get("show_tray_icon", False)),
             minimize_to_tray_on_close=bool(d.get("minimize_to_tray_on_close", False)),
+            start_minimized_to_tray=bool(d.get("start_minimized_to_tray", False)),
             notifications_enabled=bool(d.get("notifications_enabled", True)),
             active_profile=str(d.get("active_profile", "Default")),
             game_apps=[str(a).lower() for a in (d.get("game_apps") or [])],
@@ -240,6 +244,7 @@ class Settings:
         self.last_pot_values = other.last_pot_values
         self.show_tray_icon = other.show_tray_icon
         self.minimize_to_tray_on_close = other.minimize_to_tray_on_close
+        self.start_minimized_to_tray = other.start_minimized_to_tray
         self.notifications_enabled = other.notifications_enabled
         self.active_profile = other.active_profile
         self.game_apps = other.game_apps

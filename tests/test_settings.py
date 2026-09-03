@@ -37,6 +37,7 @@ class TestSettingsRoundtrip:
         assert s.audio_output_device == ""
         assert s.auto_switch_rules == {}
         assert s.recent_apps == []
+        assert s.start_minimized_to_tray is False
 
     def test_roundtrip_json(self, tmp_path):
         s = Settings()
@@ -49,6 +50,7 @@ class TestSettingsRoundtrip:
         s.set_rule("Spotify", "Music")
         s.remember_app("firefox")
         s.remember_app("vlc")
+        s.start_minimized_to_tray = True
         p = tmp_path / "settings.json"
         s.to_json(p)
 
@@ -61,6 +63,7 @@ class TestSettingsRoundtrip:
         # reguły zapisane lowercased
         assert s2.auto_switch_rules == {"discord": "Gaming", "spotify": "Music"}
         assert s2.recent_apps == ["vlc", "firefox"]   # LRU kolejność
+        assert s2.start_minimized_to_tray is True
 
     def test_corrupt_file_falls_back_to_defaults(self, tmp_path):
         p = tmp_path / "settings.json"

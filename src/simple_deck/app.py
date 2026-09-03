@@ -273,6 +273,17 @@ def wire_application(app: QApplication, demo_mode: bool = False,
         # Pass accent changes to tray
         window._tray_ref = tray  # prevent GC
 
+    # V9: Startup presentation — start minimized to tray / taskbar
+    if settings.start_minimized_to_tray and settings.show_tray_icon:
+        window._start_hidden = True   # tray icon only, no window
+        window._start_minimized = False
+    elif settings.start_minimized_to_tray:
+        window._start_hidden = False
+        window._start_minimized = True  # showMinimized()
+    else:
+        window._start_hidden = False
+        window._start_minimized = False
+
     # 8c. V8: Single-instance IPC server. Druga instancja (klik w menu aplikacji,
     # skrót na pulpicie) ping'uje nas by przywołać ukryte/zminimalizowane okno.
     # Działa niezależnie od traya — obsługuje też zwykłą minimalizację OS-ową.
@@ -397,5 +408,13 @@ def run(argv: Optional[list[str]] = None, demo_mode: bool = False,
     signal.signal(signal.SIGTERM, lambda *_: app.quit())
 
     window = wire_application(app, demo_mode=demo_mode, lock=lock)
-    window.show()
+    # V9: Start minimized (hidden to tray or minimized to taskbar)
+    if getattr(window, "_start_hidden", False):
+        # Tray icon is active, app stays alive without window
+        log.info("startup: hidden to tray icon")
+    elif getattr(window, "_start_minimized", False):
+        log.info("startup: minimized to taskbar")
+        window.showMinimized()
+    else:
+        window.show()
     return app.exec()

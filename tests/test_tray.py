@@ -15,24 +15,30 @@ class TestTraySettings:
         s = Settings()
         assert s.show_tray_icon is False
         assert s.minimize_to_tray_on_close is False
+        assert s.start_minimized_to_tray is False
 
     def test_roundtrip(self, tmp_path):
         s = Settings()
         s.show_tray_icon = True
         s.minimize_to_tray_on_close = True
+        s.start_minimized_to_tray = True
         p = tmp_path / "settings.json"
         s.to_json(p)
         s2 = Settings.from_json(p)
         assert s2.show_tray_icon is True
         assert s2.minimize_to_tray_on_close is True
+        assert s2.start_minimized_to_tray is True
 
     def test_load_copies_new_fields(self):
         s = Settings()
-        other = Settings(show_tray_icon=True, minimize_to_tray_on_close=True)
+        other = Settings(show_tray_icon=True, minimize_to_tray_on_close=True,
+                         start_minimized_to_tray=True)
         # Symuluj load — ręcznie ustaw by sprawdzić load()
         s.show_tray_icon = other.show_tray_icon
         s.minimize_to_tray_on_close = other.minimize_to_tray_on_close
+        s.start_minimized_to_tray = other.start_minimized_to_tray
         assert s.show_tray_icon is True
+        assert s.start_minimized_to_tray is True
 
 
 class TestTrayController:
