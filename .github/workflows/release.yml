@@ -109,6 +109,10 @@ jobs:
             if ($LASTEXITCODE -eq 0) { $existing = $true }
           } catch { }
 
+          # Pre-release auto-detect: alpha/beta/rc suffix (v1.0.0a, v2.0b2, v1.1.0-rc1)
+          # or the manual workflow_dispatch checkbox.
+          $isPre = ($v -cmatch '(?i)(a|b|rc)\d*$') -or ("${{ inputs.prerelease }}" -eq "true")
+          if ($isPre) { Write-Host "  (oznaczony jako PRE-RELEASE)" }
           if ($existing) {
             Write-Host "Release $tag juz istnieje - upload artefaktow (--clobber)."
             gh release upload $tag $exe --clobber
@@ -119,9 +123,8 @@ jobs:
             # - gh traktuje go jako pozycyjny arg i pada: "no matches found for ''".
             $ghArgs = @("release", "create", $tag, $exe,
                         "--title", $title, "--generate-notes")
-            if ("${{ inputs.prerelease }}" -eq "true") {
+            if ($isPre) {
               $ghArgs += "--prerelease"
-              Write-Host "  (oznaczony jako PRE-RELEASE)"
             }
             gh @ghArgs
           }

@@ -20,6 +20,10 @@ env/
 *.swp
 *~
 
+# Build logs
+build_log.txt
+*.log
+
 # OS
 .DS_Store
 Thumbs.db
