@@ -51,8 +51,9 @@ def read_version() -> str:
     """Wczytaj wersje z desktop/pyproject.toml."""
     text = PYPROJECT.read_text(encoding="utf-8")
     m = re.search(r'^\s*version\s*=\s*"([^"]+)"', text, re.MULTILINE)
-    if not m:
+    if m is None:
         die(f"Nie znaleziono wersji w {PYPROJECT}")
+        raise AssertionError("unreachable")  # die() zawsze podnosi SystemExit
     return m.group(1)
 
 
@@ -99,6 +100,7 @@ def get_repo(args_repo: str | None) -> str:
         if m:
             return f"{m.group(1)}/{m.group(2)}"
     die("Nie mozna okreslic repozytorium. Uzyj --repo OWNER/NAME.")
+    raise AssertionError("unreachable")  # die() zawsze podnosi SystemExit
 
 
 # === Krok 1: Build =========================================================
@@ -162,6 +164,7 @@ def _report_artifacts(artifacts: list[Path]) -> None:
 
 def create_tag(version: str, repo: str, dry_run: bool) -> str:
     """Utworz git tag v{version} i wypchnij."""
+    del repo  # zarezerwowane dla przyszłego użycia (GitHub remote w krokach 3-4)
     tag = f"v{version}"
     print(f"\n[2/{STEPS}] Git tag {tag}...")
 

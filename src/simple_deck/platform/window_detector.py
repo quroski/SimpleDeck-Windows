@@ -130,12 +130,12 @@ class LinuxX11Backend(WindowDetectorBackend):
         # — oszczędność ~30-60 ms cold-start + ~1 MB RSS do pierwszego pollingu.
         # Aplikacja bez auto-switch profili (większość userów) nie ładuje Xlib
         # w ogóle (window_det.start() jest pominięte gdy brak reguł).
-        self._display = None
-        self._root = None
-        self._atom_active = None
-        self._atom_pid = None
-        self._atom_name = None
-        self._atom_utf8 = None
+        self._display: Optional[object] = None  # Xlib.display.Display (lazy import)
+        self._root = None  # Xlib window obiekt (przydzielany w _ensure_display)
+        self._atom_active: Optional[int] = None
+        self._atom_pid: Optional[int] = None
+        self._atom_name: Optional[int] = None
+        self._atom_utf8: Optional[int] = None
         # V7: Cache po wid — gdy aktywne okno się nie zmieni, pomiń rund-trip
         # o PID i odczyt /proc. Steady-state: 3 X round-trips/s → 1/s.
         self._last_wid: Optional[int] = None
@@ -156,35 +156,51 @@ class LinuxX11Backend(WindowDetectorBackend):
         if self._display is None:
             try:
                 from Xlib.display import Display
-                self._display = Display()
-                self._root = self._display.screen().root
+                display = Display()
+                root = display.screen().root
                 # V6: Cache atomów — nigdy się nie zmieniają, a intern_atom to RPC.
-                self._atom_active = self._display.intern_atom("_NET_ACTIVE_WINDOW")
-                self._atom_pid = self._display.intern_atom("_NET_WM_PID")
-                self._atom_name = self._display.intern_atom("_NET_WM_NAME")
-                self._atom_utf8 = self._display.intern_atom("UTF8_STRING")
+                atom_active = display.intern_atom("_NET_ACTIVE_WINDOW")
+                atom_pid = display.intern_atom("_NET_WM_PID")
+                atom_name = display.intern_atom("_NET_WM_NAME")
+                atom_utf8 = display.intern_atom("UTF8_STRING")
             except Exception:
                 log.warning("Xlib unavailable — LinuxX11Backend becomes no-op")
                 self._init_failed = True
                 return None
+            self._display = display
+            self._root = root
+            self._atom_active = atom_active
+            self._atom_pid = atom_pid
+            self._atom_name = atom_name
+            self._atom_utf8 = atom_utf8
         return self._display
 
     def _active_window(self):
-        if self._ensure_display() is None:
+        disp = self._ensure_display()
+        root = self._root
+        atom_active = self._atom_active
+        if disp is None or root is None or atom_active is None:
             return None
         try:
-            reply = self._root.get_full_property(self._atom_active, 0)
+            reply = root.get_full_property(atom_active, 0)
             if not reply or not reply.value:
                 return None
             wid = reply.value[0]
-            win = self._display.create_resource_object("window", wid)
+            # disp is Xlib.display.Display (lazy import; type unknown to static
+            # analysis without python-xlib installed) — getattr keeps the
+            # Optional[object] annotation honest while the call stays dynamic.
+            create_resource = getattr(disp, "create_resource_object")
+            win = create_resource("window", wid)
 
             # V7: Krótki obieg gdy to samo okno — oszczędza 2 RPC (PID + /proc).
             if wid == self._last_wid and self._last_pid is not None:
                 return (win, self._last_pid, self._last_proc, self._last_title, True)
 
             # PID
-            pid_reply = win.get_full_property(self._atom_pid, 0)
+            atom_pid = self._atom_pid
+            if atom_pid is None:
+                return None
+            pid_reply = win.get_full_property(atom_pid, 0)
             pid = pid_reply.value[0] if pid_reply and pid_reply.value else None
             return (win, pid, None, None, False)
         except Exception:
@@ -197,7 +213,7 @@ class LinuxX11Backend(WindowDetectorBackend):
             return ""
         _, pid, cached_proc, _, is_cached = info
         if is_cached:
-            return cached_proc
+            return cached_proc or ""
         if not pid:
             return ""
         try:
@@ -212,9 +228,12 @@ class LinuxX11Backend(WindowDetectorBackend):
             return ""
         win, _, _, cached_title, is_cached = info
         if is_cached:
-            return cached_title
+            return cached_title or ""
+        atom_name, atom_utf8 = self._atom_name, self._atom_utf8
+        if atom_name is None or atom_utf8 is None:
+            return ""
         try:
-            r = win.get_full_property(self._atom_name, self._atom_utf8)
+            r = win.get_full_property(atom_name, atom_utf8)
             return r.value.decode("utf-8", errors="replace") if r and r.value else ""
         except Exception:
             return ""
@@ -243,8 +262,11 @@ class LinuxX11Backend(WindowDetectorBackend):
                 pass
         # Tytuł
         title = ""
+        atom_name, atom_utf8 = self._atom_name, self._atom_utf8
+        if atom_name is None or atom_utf8 is None:
+            return (proc, title)
         try:
-            r = win.get_full_property(self._atom_name, self._atom_utf8)
+            r = win.get_full_property(atom_name, atom_utf8)
             title = r.value.decode("utf-8", errors="replace") if r and r.value else ""
         except Exception:
             pass

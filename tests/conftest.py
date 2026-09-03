@@ -123,3 +123,21 @@ def tmp_home(tmp_path, monkeypatch):
     monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path / ".local" / "share"))
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / ".config"))
     return tmp_path
+
+
+# ============================================================================
+#  Aktywny profil z zawężonym typem (Profile, nie Profile | None).
+#  ProfileManager.active/load/create deklarują Optional[Profile]; testy
+#  używają tego fixture zamiast bezpośrednich odwołań by uniknąć
+#  reportOptionalMemberAccess/reportArgumentType z Pylance.
+# ============================================================================
+@pytest.fixture
+def profile(qapp, tmp_home):
+    """Zwraca aktywny profil po ensure_default() — typowo Profile, nie None."""
+    from simple_deck.core.profile_manager import ProfileManager
+
+    mgr = ProfileManager()
+    mgr.ensure_default()
+    active = mgr.active
+    assert active is not None, "ensure_default() musi zostawić aktywny profil"
+    return mgr, active

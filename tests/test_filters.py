@@ -21,11 +21,11 @@ SEND_THR = 16
 class AdaptiveFilter:
     """Pythonowa kopia filtra z firmware/src/adc.c (wersja float dla czytelności)."""
 
-    def __init__(self):
-        self.ema = None
-        self.last_sent = None
-        self.dirty = False
-        self._initialized = False
+    def __init__(self) -> None:
+        self.ema: float | None = None
+        self.last_sent: float | None = None
+        self.dirty: bool = False
+        self._initialized: bool = False
 
     def update(self, raw: int) -> bool:
         """Aktualizuje filtr. Zwraca True jeśli ramka powinna być wysłana."""
@@ -36,17 +36,21 @@ class AdaptiveFilter:
             self.dirty = True
             return True
 
-        err = raw - self.ema
+        ema = self.ema
+        last_sent = self.last_sent
+        assert ema is not None and last_sent is not None  # po inicjalizacji
+        err = raw - ema
         abs_err = abs(err)
 
         if abs_err < DEADBAND:
             return False
 
         alpha = ALPHA_FAST if abs_err > FAST_THR else ALPHA_SLOW
-        self.ema += alpha * (raw - self.ema)
+        ema += alpha * (raw - ema)
+        self.ema = ema
 
-        if abs(self.ema - self.last_sent) >= SEND_THR:
-            self.last_sent = self.ema
+        if abs(ema - last_sent) >= SEND_THR:
+            self.last_sent = ema
             self.dirty = True
             return True
         return False
@@ -71,6 +75,7 @@ class TestAdaptiveFilter:
         emitted = f.update(1500)
         assert emitted is True
         # alfa = 0.80, więc ema powinien ruszyć się znacząco w kierunku 1500
+        assert f.ema is not None
         assert abs(f.ema - 1000) > 200  # ema ~= 1000 + 0.8*500 = 1400
 
     def test_slow_movement_filters_smoothly(self):
@@ -79,6 +84,7 @@ class TestAdaptiveFilter:
         # Powolny ruch - alfa = 0.05, ema powinien ledwo się ruszyć
         f.update(1020)  # delta = 20, powyżej DEADBAND, ale poniżej FAST_THR
         # ema = 1000 + 0.05*20 = 1001 - bardzo blisko 1000
+        assert f.ema is not None
         assert abs(f.ema - 1000) < 5
 
     def test_send_threshold_avoids_micro_updates(self):
@@ -109,4 +115,5 @@ class TestAdaptiveFilter:
         for v in range(0, 4096, 50):
             f.update(v)
         # Po przetworzeniu całego zakresu ema powinno być blisko 4095
+        assert f.ema is not None
         assert abs(f.ema - 4095) < 100

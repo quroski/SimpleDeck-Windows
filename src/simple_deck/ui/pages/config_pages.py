@@ -16,7 +16,8 @@ from typing import Optional
 from PySide6.QtCore import Qt, QTimer, Signal
 from PySide6.QtWidgets import (QCheckBox, QComboBox, QDialog, QFrame,
                                 QHBoxLayout, QLabel, QLineEdit,
-                                QProgressBar, QPushButton, QScrollArea, QSlider,
+                                QProgressBar, QPushButton, QScrollArea,
+                                QSizePolicy, QSlider,
                                 QTabWidget, QVBoxLayout, QWidget)
 
 from ... import __version__
@@ -32,6 +33,12 @@ from ..widgets.icon import IconLabel
 from ..widgets.profile_switcher import ProfileSwitcher
 
 log = logging.getLogger(__name__)
+
+
+class _Card(QFrame):
+    """QFrame karty z doklejonym atrybutem _icon_ref (zapobieganie GC)."""
+
+    _icon_ref: object
 
 
 class _BaseConfigPage(QWidget):
@@ -96,7 +103,7 @@ class _BaseConfigPage(QWidget):
         # Czyść stare wiersze (poza nagłówkiem na pozycji 0)
         while self._content.count() > 1:
             item = self._content.takeAt(1)
-            w = item.widget()
+            w = item.widget() if item is not None else None
             if w is not None:
                 w.deleteLater()
         self._populate_rows()
@@ -549,7 +556,7 @@ class SettingsPage(QWidget):
     # Helper budujący kartę
     # ============================================================
     def _card(self, title: str, icon: str = "settings") -> tuple[QFrame, QVBoxLayout]:
-        card = QFrame(objectName="card")
+        card = _Card(objectName="card")
         cl = QVBoxLayout(card)
         cl.setContentsMargins(24, 20, 24, 20)
         cl.setSpacing(10)
@@ -719,7 +726,7 @@ class SettingsPage(QWidget):
         # Wyczyść listę
         while self._rules_lay.count():
             it = self._rules_lay.takeAt(0)
-            w = it.widget()
+            w = it.widget() if it is not None else None
             if w is not None:
                 w.deleteLater()
         for proc, prof in sorted(self._settings.auto_switch_rules.items()):
@@ -792,7 +799,7 @@ class SettingsPage(QWidget):
     def _reload_games(self) -> None:
         while self._games_lay.count():
             it = self._games_lay.takeAt(0)
-            w = it.widget()
+            w = it.widget() if it is not None else None
             if w is not None:
                 w.deleteLater()
         for app in sorted(self._settings.game_apps):

@@ -16,7 +16,11 @@ def _pot_at_position(deck: DeckMap, col: int) -> int:
     """Zwróć fizyczny indeks (_idx) potencjometru w danej kolumnie gridu."""
     item = deck._pot_grid.itemAtPosition(0, col)
     assert item is not None, f"Brak widgetu na pozycji (0,{col})"
-    return item.widget()._idx
+    widget = item.widget()
+    assert widget is not None
+    idx = getattr(widget, "_idx", None)
+    assert idx is not None, "Komórka pota musi mieć atrybut _idx"
+    return idx
 
 
 class TestDeckMapReorder:

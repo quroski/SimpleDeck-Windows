@@ -8,5 +8,8 @@ importuje bezpośrednio z odpowiedniego modułu:
     from simple_deck.ui.pages.overview import OverviewPage
     from simple_deck.ui.pages.config_pages import PotsPage, ButtonsPage, SettingsPage
     from simple_deck.ui.pages.led_page import LedPage
+
+V1.0.2: ``__all__`` usunięte — wymieniało klasy, których ten moduł nie
+eksportuje (lazy imports), co dawało błędne raporty "not present in module".
 """
-__all__ = ["OverviewPage", "PotsPage", "ButtonsPage", "LedPage", "SettingsPage"]
+# Celowo puste: re-eksporty są lazy (patrz docstring wyżej).

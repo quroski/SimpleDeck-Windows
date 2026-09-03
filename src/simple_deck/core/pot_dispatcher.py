@@ -220,6 +220,7 @@ class PotDispatcher(QObject):
             return
         # Cache foreground proc raz per flush — wspólne dla wszystkich potów GAME_VOLUME
         fg_proc = ""
+        game_apps: list[str] = []
         has_game_pot = any(
             idx < len(self._profile.pots)
             and self._profile.pots[idx].action == PotAction.GAME_VOLUME
@@ -227,8 +228,8 @@ class PotDispatcher(QObject):
         )
         if has_game_pot:
             fg_proc = self._get_foreground_proc()
-            game_apps = [a.lower() for a in getattr(self._settings, "game_apps", [])] \
-                if self._settings else []
+            if self._settings is not None:
+                game_apps = [a.lower() for a in getattr(self._settings, "game_apps", [])]
         for idx, vol in list(self._pending.items()):
             try:
                 target = None

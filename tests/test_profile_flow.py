@@ -23,10 +23,10 @@ class TestProfileSwitchPropagation:
     def test_switch_profile_updates_pot_dispatcher(self, qapp, bus, tmp_home):
         mgr = ProfileManager()
         mgr.ensure_default()
-        mgr.create("Gaming")
+        gaming = mgr.create("Gaming")
+        assert gaming is not None
 
         # Skonfiguruj profil Gaming z innym mapping'iem pota
-        gaming = mgr.load("Gaming")
         gaming.pots[0] = PotConfig(idx=0, action=PotAction.APP_VOLUME,
                                     target="game.exe")
         mgr.save(gaming)
@@ -36,11 +36,14 @@ class TestProfileSwitchPropagation:
         settings.invert_all_pots = False
         settings.last_pot_values = [-1] * 5
         disp = PotDispatcher(bus, audio, settings=settings)
-        disp.set_profile(mgr.active)
+        current = mgr.active
+        assert current is not None
+        disp.set_profile(current)
 
         # Przełącz na Default
         mgr.set_active("Default")
         default = mgr.active
+        assert default is not None
         disp.set_profile(default)
 
         # Pot 0 w Default = SYSTEM_VOLUME (domyślny)
@@ -52,9 +55,9 @@ class TestProfileSwitchPropagation:
     def test_switch_profile_updates_hotkey_dispatcher(self, qapp, bus, tmp_home):
         mgr = ProfileManager()
         mgr.ensure_default()
-        mgr.create("Media")
+        media = mgr.create("Media")
+        assert media is not None
 
-        media = mgr.load("Media")
         media.buttons[0] = ButtonConfig(
             idx=0, action=ButtonAction.HOTKEY, hotkey="MediaPlay",
             on_press=True)
@@ -63,7 +66,9 @@ class TestProfileSwitchPropagation:
         hotkey = MagicMock()
         disp = HotkeyDispatcher(bus=bus, hotkey_backend=hotkey)
         disp._thread_pool = MagicMock()
-        disp.set_profile(mgr.active)
+        current = mgr.active
+        assert current is not None
+        disp.set_profile(current)
 
         # V6: HOTKEY jest async (QThreadPool) — sprawdzamy że job jest startowany
         bus.button_event.emit(0, True)
@@ -94,6 +99,7 @@ class TestProfileSaveLoadRoundtrip:
         mgr = ProfileManager()
         mgr.ensure_default()
         p = mgr.active
+        assert p is not None
         p.pots[2] = PotConfig(
             idx=2, action=PotAction.APP_VOLUME, target="firefox",
             sensitivity=1.5, curve="log", min_volume=0.1, max_volume=0.9,
@@ -103,6 +109,7 @@ class TestProfileSaveLoadRoundtrip:
         # Re-load z dysku
         mgr2 = ProfileManager()
         loaded = mgr2.load("Default")
+        assert loaded is not None
         cfg = loaded.pots[2]
         assert cfg.action == PotAction.APP_VOLUME
         assert cfg.target == "firefox"
@@ -116,6 +123,7 @@ class TestProfileSaveLoadRoundtrip:
         mgr = ProfileManager()
         mgr.ensure_default()
         p = mgr.active
+        assert p is not None
         p.buttons[1] = ButtonConfig(
             idx=1, action=ButtonAction.TOGGLE_MUTE, target="discord",
             on_press=False)
@@ -123,6 +131,7 @@ class TestProfileSaveLoadRoundtrip:
 
         mgr2 = ProfileManager()
         loaded = mgr2.load("Default")
+        assert loaded is not None
         cfg = loaded.buttons[1]
         assert cfg.action == ButtonAction.TOGGLE_MUTE
         assert cfg.target == "discord"
@@ -132,6 +141,7 @@ class TestProfileSaveLoadRoundtrip:
         mgr = ProfileManager()
         mgr.ensure_default()
         p = mgr.active
+        assert p is not None
         p.led_mode = LedMode.KNIGHT_RIDER.value
         p.led_brightness = 128
         p.led_speed_ms = 750
@@ -140,6 +150,7 @@ class TestProfileSaveLoadRoundtrip:
 
         mgr2 = ProfileManager()
         loaded = mgr2.load("Default")
+        assert loaded is not None
         assert loaded.led_mode == LedMode.KNIGHT_RIDER.value
         assert loaded.led_brightness == 128
         assert loaded.led_speed_ms == 750
@@ -159,6 +170,7 @@ class TestProfileSaveLoadRoundtrip:
 
         mgr = ProfileManager()
         loaded = mgr.load("OldProfile")
+        assert loaded is not None
         assert loaded.schema_version == SCHEMA_VERSION
         assert loaded.led_mode == LedMode.VU_BAR.value  # domyślny
         assert loaded.led_brightness == 255
@@ -178,6 +190,7 @@ class TestProfileCRUDFlow:
         assert "Work" in mgr.list_profiles()
 
         # Modify + save
+        assert p is not None
         p.pots[0] = PotConfig(idx=0, target="slack")
         mgr.save(p)
 
@@ -200,6 +213,7 @@ class TestProfileCRUDFlow:
         mgr = ProfileManager()
         mgr.ensure_default()
         p = mgr.active
+        assert p is not None
         p.pots[0] = PotConfig(idx=0, action=PotAction.APP_VOLUME,
                                target="spotify")
         mgr.save(p)
@@ -228,7 +242,9 @@ class TestAutoSwitchRules:
 
         # Symuluj aktywne okno Discord
         mgr.on_foreground_process("discord")
-        assert mgr.active.name == "Discord"
+        active = mgr.active
+        assert active is not None
+        assert active.name == "Discord"
 
     def test_rule_case_insensitive(self, qapp, tmp_home):
         mgr = ProfileManager()
@@ -237,7 +253,9 @@ class TestAutoSwitchRules:
 
         mgr.set_rule("Spotify.exe", "Spotify")
         mgr.on_foreground_process("SPOTIFY.EXE")
-        assert mgr.active.name == "Spotify"
+        active = mgr.active
+        assert active is not None
+        assert active.name == "Spotify"
 
     def test_no_rule_no_switch(self, qapp, tmp_home):
         mgr = ProfileManager()
@@ -245,6 +263,10 @@ class TestAutoSwitchRules:
         mgr.create("Other")
 
         # Brak reguły dla „unknown.exe" → brak przełączenia
-        original = mgr.active.name
+        original = mgr.active
+        assert original is not None
+        original_name = original.name
         mgr.on_foreground_process("unknown.exe")
-        assert mgr.active.name == original
+        after = mgr.active
+        assert after is not None
+        assert after.name == original_name

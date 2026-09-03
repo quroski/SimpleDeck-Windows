@@ -27,3 +27,7 @@ build_log.txt
 # OS
 .DS_Store
 Thumbs.db
+
+# Test runner helpers (local)
+_run_tests.py
+pytest_out.txt

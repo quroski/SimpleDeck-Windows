@@ -295,7 +295,7 @@ class HotkeyCaptureDialog(QDialog):
 
     def get_combo(self) -> str:
         """Zwraca przechwycony combo (lub '' jeśli wyczyszczono/anulowano)."""
-        return self._combo if self._captured else ""
+        return self._combo if (self._captured and self._combo is not None) else ""
 
 
 class HotkeyField(QLineEdit):

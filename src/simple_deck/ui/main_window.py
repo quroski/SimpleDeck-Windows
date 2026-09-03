@@ -75,6 +75,11 @@ class MainWindow(QMainWindow):
     # app.py podpina tu throttle WindowDetector (1 s → 3 s) i stop AppListCache.
     visibility_changed = Signal(bool)
 
+    # Atrybuty ustawiane z zewnątrz przez app.py (tray + startup minimized).
+    _tray_ref: Optional[object] = None
+    _start_hidden: bool = False    # True → ukryj okno przy starcie (tylko tray)
+    _start_minimized: bool = False  # True → showMinimized() przy starcie
+
     def __init__(self, bus: EventBus, connection: ConnectionManager,
                  audio_backend=None, profile_mgr: Optional[ProfileManager] = None,
                  settings=None, parent=None):
@@ -301,8 +306,9 @@ class MainWindow(QMainWindow):
         # 1b. QSS na poziomie aplikacji - tematyzuje dialogi, menu kontekstowe,
         # tooltipy które nie są dziećmi MainWindow. Window-level QSS nadal ma
         # priorytet dla widgetów okna głównego (brak konfliktu).
+        from PySide6.QtWidgets import QApplication as _QApplication
         app = QApplication.instance()
-        if app is not None:
+        if isinstance(app, _QApplication):
             app.setStyleSheet(qss)
         # 2. Ikony - wyczyść cache i przebarwij wszystkie IconLabel
         clear_icon_cache()
@@ -494,7 +500,7 @@ class MainWindow(QMainWindow):
             edges |= Qt.BottomEdge
         return edges
 
-    def nativeEvent(self, eventType, message):
+    def nativeEvent(self, eventType, message: int) -> object:
         """Windows: WM_NCHITTEST — krawędzie okna jako strefy resize OS-a.
 
         Natywny hit-test idzie do okna PRZED rozdzieleniem na child widgety,
@@ -502,7 +508,7 @@ class MainWindow(QMainWindow):
         nie dostanie eventu (dzieci pochłaniają). Daje natywne kursory,
         płynny resize i Aero Snap za darmo.
         """
-        if eventType == "windows_generic_MSG":
+        if eventType == b"windows_generic_MSG":
             try:
                 ht = self._nchittest(message)
             except Exception:

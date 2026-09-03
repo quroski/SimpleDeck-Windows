@@ -18,6 +18,12 @@ INACTIVE = "#A5ABC0"
 ACTIVE_TEXT = "#F5F7FA"
 
 
+class _NavButton(QPushButton):
+    """QPushButton z doklejonym atrybutem ikony (unika setattr na QWidget)."""
+
+    _icon_name: str
+
+
 class NavSidebar(QFrame):
     """Sidebar z 5 przyciskami nawigacji (checkable, exclusive)."""
 
@@ -36,7 +42,7 @@ class NavSidebar(QFrame):
         self.setObjectName("sidebar")
         self.setFixedWidth(230)
         self._accent = ACCENT_DEFAULT
-        self._buttons: list[QPushButton] = []
+        self._buttons: list[_NavButton] = []
 
         lay = QVBoxLayout(self)
         lay.setContentsMargins(14, 18, 14, 18)
@@ -52,7 +58,7 @@ class NavSidebar(QFrame):
         self._group.setExclusive(True)
 
         for idx, (icon_name, text) in enumerate(self.NAV_ITEMS):
-            btn = QPushButton(f"  {text}", objectName="navItem")
+            btn = _NavButton(f"  {text}", objectName="navItem")
             btn.setCheckable(True)
             btn.setCursor(Qt.PointingHandCursor)
             btn.setIconSize(QSize(18, 18))

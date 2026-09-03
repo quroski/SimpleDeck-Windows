@@ -46,6 +46,10 @@ class HotkeyBackend(ABC):
     def available(self) -> bool:
         ...
 
+    def backend_name(self) -> str:
+        """Nazwa backendu (do logów). Domyślnie nazwa klasy."""
+        return type(self).__name__
+
 
 class NullHotkeyBackend(HotkeyBackend):
     def simulate_combo(self, combo: str) -> bool:

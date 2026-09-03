@@ -1,6 +1,8 @@
 """Testy tray icon (TrayController) i ustawień tray."""
 from __future__ import annotations
 
+from typing import cast
+
 from unittest.mock import MagicMock
 
 from PySide6.QtWidgets import QApplication
@@ -51,7 +53,7 @@ class TestTrayController:
             connection.state_changed = MagicMock()
             # Can't easily connect to MagicMock signal; skip state wiring
         tray = TrayController(
-            app=QApplication.instance(),
+            app=cast(QApplication, QApplication.instance()),
             connection=None,  # pass None to avoid signal connection issues
             bus=None,
             settings=settings,

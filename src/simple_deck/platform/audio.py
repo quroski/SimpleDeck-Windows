@@ -16,7 +16,7 @@ from __future__ import annotations
 import logging
 import sys
 from abc import ABC, abstractmethod
-from typing import Optional
+from typing import Any, Optional
 
 log = logging.getLogger(__name__)
 
@@ -58,6 +58,16 @@ class AudioBackend(ABC):
         """
         return False
 
+    def set_output_device(self, name: str) -> None:
+        """Ustaw urządzenie wyjściowe do sterowania głośnością systemową.
+
+        Domyślnie no-op - backendy nadpisują jeśli obsługują wybór urządzenia.
+        """
+
+    def backend_name(self) -> str:
+        """Nazwa backendu (do logów). Domyślnie nazwa klasy."""
+        return type(self).__name__
+
     def get_peak(self, target: Optional[str] = None) -> float:
         """Szczytowy poziom audio 0..1 dla VU meter (C10).
 
@@ -94,7 +104,9 @@ class WindowsAudioBackend(AudioBackend):
         self._AudioUtilities = AudioUtilities
         self._CLSCTX_ALL = CLSCTX_ALL
         self._volume_iid = IAudioEndpointVolume._iid_
-        self._session_cache: dict[str, object] = {}
+        # pycaw/comtypes nie mają stubów — sesje trzymamy jako Any
+        # (dynamiczne obiekty COM; statyczna analiza nie zna ich atrybutów).
+        self._session_cache: dict[str, Any] = {}
         self._session_cache_at: dict[str, float] = {}
         self._session_ttl = 10.0  # V8: Increased from 5.0 - sessions don't change that fast
         # V8: Volume cache with short TTL to reduce WASAPI calls
@@ -152,6 +164,9 @@ class WindowsAudioBackend(AudioBackend):
                     if d.name == self._device_name:
                         return d.EndpointVolume
         devices = self._AudioUtilities.GetSpeakers()
+        if devices is None:
+            # Brak endpointu (rzadkie) — caller loguje i zwraca bezpieczną wartość.
+            raise RuntimeError("no default audio endpoint")
         return devices.EndpointVolume
 
     def get_volume(self, target: Optional[str] = None) -> float:
@@ -234,10 +249,14 @@ class WindowsAudioBackend(AudioBackend):
             else:
                 from ctypes import cast, POINTER
                 devices = self._AudioUtilities.GetSpeakers()
+                if devices is None:
+                    return 0.0
                 meter = devices._dev.Activate(IAudioMeterInformation._iid_,
                                               self._CLSCTX_ALL, None)
                 meter = cast(meter, POINTER(IAudioMeterInformation))
-            return float(meter.GetPeakValue())
+            # Metody interfejsu COM generuje comtypes w runtime — getattr zamiast
+            # bezpośredniego dostępu (statycznie niewidoczne).
+            return float(getattr(meter, "GetPeakValue")())
         except Exception:
             return 0.0
 
@@ -249,7 +268,7 @@ class WindowsAudioBackend(AudioBackend):
             for d in devs:
                 # Tylko endpointy odtwarzania (Render), nie Capture
                 if str(getattr(d, "DataFlow", "")).lower().startswith("render"):
-                    name = d.name if hasattr(d, "name") else str(d)
+                    name = getattr(d, "name", str(d))
                     out.append((name, name))
             return out
         except Exception:
@@ -286,7 +305,7 @@ class LinuxPulseAudioBackend(AudioBackend):
         self._si_cache_at: dict[str, float] = {}
         self._si_ttl = 5.0
 
-    def _ensure_pulse(self):
+    def _ensure_pulse(self) -> Any:
         """Leniwa inicjalizacja połączenia PulseAudio — dopiero gdy potrzebne.
 
         V7: Również lazy ``import pulsectl`` — moduł ładuje się dopiero gdy
@@ -297,9 +316,11 @@ class LinuxPulseAudioBackend(AudioBackend):
         if self._pulsectl is None:
             import pulsectl
             self._pulsectl = pulsectl
-        if self._pulse is None:
-            self._pulse = self._pulsectl.Pulse("simple-deck")
-        return self._pulse
+        pulse = self._pulse
+        if pulse is None:
+            pulse = self._pulsectl.Pulse("simple-deck")
+            self._pulse = pulse
+        return pulse
 
     def list_apps(self) -> list[str]:
         try:
@@ -313,7 +334,7 @@ class LinuxPulseAudioBackend(AudioBackend):
             log.exception("list_apps failed")
             return []
 
-    def _find_sink_input(self, target: str):
+    def _find_sink_input(self, target: str) -> Any:
         """Znajdź sink_input dla `target` z cache TTL 5 s.
 
         Eliminuje sink_input_list() RPC na każdym set_volume (30 Hz pot wiggle
@@ -347,8 +368,9 @@ class LinuxPulseAudioBackend(AudioBackend):
         """Zwraca domyślny sink (urządzenie wyjściowe) lub None."""
         pulse = self._ensure_pulse()
         server = pulse.server_info()
+        default_name = server.default_sink_name
         for s in pulse.sink_list():
-            if s.name == server.default_sink_name:
+            if s.name == default_name:
                 return s
         sinks = pulse.sink_list()
         return sinks[0] if sinks else None

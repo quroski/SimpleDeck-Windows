@@ -71,12 +71,12 @@ class TestInitialSize:
     def test_tiny_saved_size_rejected(self):
         """V1.0.2: zapis < 900x600 odrzucony (degeneracja/niedozwolony rozmiar)."""
         s = Settings()
-        s.window_size = [400, 300]
+        s.window_size = [400, 300]  # type: ignore[assignment] — śmieciowe dane JSON
         assert MainWindow._initial_size(settings=s) == self.DEFAULT_SIZE
 
     def test_garbage_saved_ignored(self):
         s = Settings()
-        s.window_size = ["abc", None]
+        s.window_size = ["abc", None]  # type: ignore[assignment] — śmieciowe dane JSON
         assert MainWindow._initial_size(settings=s) == self.DEFAULT_SIZE
 
     def test_zero_saved_ignored(self):

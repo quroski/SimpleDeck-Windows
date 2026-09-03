@@ -82,7 +82,7 @@ class ToastHost(QWidget):
     Subskrybuje ``bus.notify``.
     """
 
-    def __init__(self, bus, window: QWidget, settings=None, parent=None):
+    def __init__(self, bus, window: QWidget | None, settings=None, parent=None):
         super().__init__(parent)
         self._window = window
         self._settings = settings
@@ -105,6 +105,9 @@ class ToastHost(QWidget):
         self._bus = bus
         bus.notify.connect(self.show_toast)
 
+        # Referencja trzymana poza self.layout() (które w stubach Qt jest
+        # Optional[QLayout]) — pewniejszy dostęp w show_toast/_follow.
+        self._lay = lay
         self._follow()
 
     def show_toast(self, level: str, message: str) -> None:
@@ -112,7 +115,7 @@ class ToastHost(QWidget):
             return
         toast = Toast(level, message, parent=self)
         # Wstaw przed stretch'em (na dole listy - kolejność top-down)
-        lay = self.layout()
+        lay = self._lay
         lay.insertWidget(lay.count() - 1, toast)
         toast.dismissed.connect(lambda: lay.removeWidget(toast))
         self._follow()
@@ -122,7 +125,7 @@ class ToastHost(QWidget):
         if self._window is None:
             return
         geo = self._window.geometry()
-        w, h = 340, min(400, max(120, self.layout().sizeHint().height() + 16))
+        w, h = 340, min(400, max(120, self._lay.sizeHint().height() + 16))
         # Pozycja względem ekranu (top-right okna z marginesem)
         top_left = self._window.mapToGlobal(geo.topLeft())
         x = top_left.x() + geo.width() - w - 24

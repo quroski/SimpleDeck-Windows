@@ -7,6 +7,13 @@ from simple_deck.core.profile import Profile, SCHEMA_VERSION
 from simple_deck.core.profile_manager import ProfileManager, _sanitize_name
 
 
+def _active(mgr: ProfileManager) -> Profile:
+    """mgr.active z zawężonym typem (Optional → Profile) dla statycznej analizy."""
+    active = mgr.active
+    assert active is not None
+    return active
+
+
 class TestSanitize:
     def test_strips_path_separators(self):
         assert _sanitize_name("../../etc/x") == "etcx"
@@ -34,7 +41,7 @@ class TestCRUD:
         p = mgr.create("Gaming", "opis")
         assert p is not None
         assert "Gaming" in mgr.list_profiles()
-        assert mgr.active.name == "Gaming"
+        assert _active(mgr).name == "Gaming"
 
     def test_create_duplicate_returns_none(self, qapp, tmp_home):
         mgr = ProfileManager()
@@ -47,7 +54,7 @@ class TestCRUD:
         assert mgr.rename("Default", "Renamed") is True
         assert "Renamed" in mgr.list_profiles()
         assert "Default" not in mgr.list_profiles()
-        assert mgr.active.name == "Renamed"
+        assert _active(mgr).name == "Renamed"
 
     def test_rename_collision_fails(self, qapp, tmp_home):
         mgr = ProfileManager()
@@ -75,7 +82,7 @@ class TestCRUD:
         mgr.set_active("Second")
         assert mgr.delete("Second") is True
         # aktywny przełączył się na Default (pozostały)
-        assert mgr.active.name == "Default"
+        assert _active(mgr).name == "Default"
 
 
 class TestImportExport:

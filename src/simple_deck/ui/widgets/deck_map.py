@@ -202,12 +202,16 @@ class _VolumeBar(QFrame):
     def set_level(self, pot_idx: int, level: float) -> None:
         """Ustaw poziom linijki (0..1). Zapala N z 8 segmentów.
 
+        ``pot_idx`` przychodzi z sygnału ``bus.pot_level(idx, level)`` i jest
+        ignorowany — VU bar pokazuje poziom aktywnego kanału.
+
         V6: ``setProperty`` + ``polish`` zamiast ``setStyleSheet`` —
         ~10× szybsze (brak QSS re-parse).
         V7: Pomiń gdy niewidoczny — eliminuje ~80 polishów/s gdy user na
         innej karcie lub zminimalizowany do tray. Pierwszy event po powrocie
         odświeży bar w ~30 ms.
         """
+        del pot_idx  # nieużywany — sygnatura sterowana sygnałem pot_level
         if not self.isVisible():
             return
         level = max(0.0, min(1.0, level))
