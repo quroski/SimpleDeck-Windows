@@ -34,8 +34,11 @@ class _FakeScreen:
 # ============================================================================
 
 class TestInitialSize:
+    # V1.0.2: Sane minimum 900x600 + clamp do 90% available geometry.
+    DEFAULT_SIZE = (1280, 800)
+
     def test_default_1280x800(self):
-        assert MainWindow._initial_size() == (1280, 800)
+        assert MainWindow._initial_size() == self.DEFAULT_SIZE
 
     def test_saved_size_restored(self):
         s = Settings()
@@ -51,20 +54,35 @@ class TestInitialSize:
         assert size[1] <= 728 - 24
 
     def test_default_clamped_to_small_screen(self):
-        """Bez zapisanego rozmiaru: 1280x800 na avail 1280x620 (DPI 150%)."""
+        """Bez zapisanego rozmiaru: 1280x800 na avail 1280x620 (DPI 150%).
+
+        Clamp = 90% dostępnej geometrii, ale wynik nigdy nie schodzi poniżej
+        sanity minimum 900x600 (okno poniżej traci użyteczność).
+        """
         size = MainWindow._initial_size(screen=_FakeScreen(1280, 620))
-        assert size[0] <= 1256
-        assert size[1] <= 596
+        assert size == (max(int(1280 * 0.9) & ~1, 900),
+                        max(int(620 * 0.9) & ~1, 600))
+
+    def test_clamped_size_is_proportional(self):
+        """V1.0.2: clamp = 90% dostępnej geometrii (równe wartości), nie -24px."""
+        size = MainWindow._initial_size(screen=_FakeScreen(1366, 728))
+        assert size == (int(1366 * 0.9) & ~1, int(728 * 0.9) & ~1)
+
+    def test_tiny_saved_size_rejected(self):
+        """V1.0.2: zapis < 900x600 odrzucony (degeneracja/niedozwolony rozmiar)."""
+        s = Settings()
+        s.window_size = [400, 300]
+        assert MainWindow._initial_size(settings=s) == self.DEFAULT_SIZE
 
     def test_garbage_saved_ignored(self):
         s = Settings()
         s.window_size = ["abc", None]
-        assert MainWindow._initial_size(settings=s) == (1280, 800)
+        assert MainWindow._initial_size(settings=s) == self.DEFAULT_SIZE
 
     def test_zero_saved_ignored(self):
         s = Settings()
         s.window_size = [0, 0]
-        assert MainWindow._initial_size(settings=s) == (1280, 800)
+        assert MainWindow._initial_size(settings=s) == self.DEFAULT_SIZE
 
 
 # ============================================================================
@@ -141,16 +159,16 @@ class TestWindowSizePersistence:
         s = Settings()
         win = MainWindow(bus=bus, connection=mock_connection, settings=s)
         try:
-            win.resize(950, 560)
+            win.resize(950, 620)
             win._flush_settings()
         finally:
             win.close()
 
-        assert s.window_size == [950, 560]
+        assert s.window_size == [950, 620]
         data = json.loads(target.read_text(encoding="utf-8"))
-        assert data["window_size"] == [950, 560]
-        # Restore path: nowy okno dostanie 950x560 (clamped do fake screen)
-        assert MainWindow._initial_size(settings=s) == (950, 560)
+        assert data["window_size"] == [950, 620]
+        # Restore path: nowy okno dostanie 950x620 (clamped do fake screen)
+        assert MainWindow._initial_size(settings=s) == (950, 620)
 
 
 class TestMinimumSize:
@@ -160,5 +178,69 @@ class TestMinimumSize:
         try:
             assert win.minimumWidth() <= 900
             assert win.minimumHeight() <= 560
+        finally:
+            win.close()
+
+
+class TestPanelScaling:
+    """V1.0.2: Panele muszą się skalować ze zmianą rozmiaru okna.
+
+    Regresja: QProgressBar w _PotCell miał domyślny minimumSizeHint 111 px,
+    co wymuszało sztywne minimum komórki 149 px → DeckMap 827 px. Panel był
+    szerszy niż cała treść przy minimalnym oknie (820 px) — karty nie
+    zwężały się, tylko przelewały poza widok.
+    """
+
+    def test_deck_map_scales_with_window(self, qapp, bus, mock_connection):
+        win = MainWindow(bus=bus, connection=mock_connection, settings=Settings())
+        try:
+            win.show()
+            qapp.processEvents()
+
+            dm = win._page_overview._deck_map
+            win.resize(1280, 800)
+            qapp.processEvents()
+            wide = dm.width()
+            cells_wide = [c.width() for c in dm._pots]
+
+            win.resize(820, 520)
+            qapp.processEvents()
+            narrow = dm.width()
+            cells_narrow = [c.width() for c in dm._pots]
+
+            # Panel treścikurczy się razem z oknem
+            assert narrow < wide
+            # Komórki potencjometrów zwężają się proporcjonalnie
+            assert all(n < w for n, w in zip(cells_narrow, cells_wide))
+            # DeckMap nie jest szerszy niż panel treści
+            stack = win._stack
+            assert dm.width() <= stack.width() + 1
+        finally:
+            win.close()
+
+    def test_deck_map_min_fits_min_window(self, qapp, bus, mock_connection):
+        """DeckMap minimumSizeHint mieści się w panelu treści przy min. oknie."""
+        win = MainWindow(bus=bus, connection=mock_connection, settings=Settings())
+        try:
+            dm = win._page_overview._deck_map
+            # Panel treści przy min. oknie 820: 820 - 2*18 (root margins)
+            #   - 230 (sidebar) - 12 (spacing) = 542 px
+            assert dm.minimumSizeHint().width() <= 542
+        finally:
+            win.close()
+
+    def test_overview_uses_scroll_not_overflow(self, qapp, bus, mock_connection):
+        """Przy małym oknie overview skaluje w dół (scroll), bez sztywnego min."""
+        win = MainWindow(bus=bus, connection=mock_connection, settings=Settings())
+        try:
+            win.resize(820, 520)
+            qapp.processEvents()
+            stack_w = win._stack.width()
+            # Żadna strona nie powinna wymuszać szerokości większej niż stack
+            for i in range(win._stack.count()):
+                page = win._stack.widget(i)
+                if page is not None:
+                    assert page.minimumSizeHint().width() <= stack_w + 1, \
+                        f"page {i} min {page.minimumSizeHint().width()} > stack {stack_w}"
         finally:
             win.close()

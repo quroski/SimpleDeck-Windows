@@ -73,7 +73,9 @@ class _BaseConfigPage(QWidget):
         head = QHBoxLayout()
         title_lbl = QLabel(title, objectName="sectionTitle")
         title_lbl.setStyleSheet("font-size: 22px; font-weight: 700; background: transparent;")
+        # V1.0.2: Ignored — subtitle nie rozpycha strony przy wąskim oknie.
         sub_lbl = QLabel(subtitle, objectName="sectionSubtitle")
+        sub_lbl.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
         head.addWidget(title_lbl)
         head.addStretch()
         head.addWidget(sub_lbl, alignment=Qt.AlignBottom)

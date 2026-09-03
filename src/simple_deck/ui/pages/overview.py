@@ -5,7 +5,7 @@ from collections import deque
 
 from PySide6.QtCore import Qt, QTimer, Signal, Slot
 from PySide6.QtWidgets import (QFrame, QHBoxLayout, QLabel, QScrollArea,
-                                QVBoxLayout, QWidget)
+                                QSizePolicy, QVBoxLayout, QWidget)
 
 from ...core.event_bus import EventBus
 from ...transport.connection_manager import ConnectionManager, ConnectionState
@@ -40,8 +40,11 @@ class OverviewPage(QWidget):
         head_box = QHBoxLayout()
         title = QLabel("OVERVIEW", objectName="sectionTitle")
         title.setStyleSheet("font-size: 22px; font-weight: 700; color: #F5F7FA; background: transparent;")
+        # V1.0.2: Ignored — subtitle (~456 px hint) rozpychał stronę; bez tego
+        # overview nie dawał się zwęzić poniżej szerokości tekstu nagłówka.
         subtitle = QLabel("Stan urządzenia i wizualizacja na żywo",
                           objectName="sectionSubtitle")
+        subtitle.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
         head_box.addWidget(title)
         head_box.addStretch()
         head_box.addWidget(subtitle, alignment=Qt.AlignBottom)

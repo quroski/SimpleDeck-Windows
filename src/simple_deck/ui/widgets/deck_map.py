@@ -33,13 +33,19 @@ class _PotCell(QFrame):
         self.setCursor(Qt.PointingHandCursor)
 
         lay = QVBoxLayout(self)
-        lay.setContentsMargins(14, 10, 14, 10)
+        # V1.0.2: margins 14→10 — przy min. szerokości okna (820) komórki mają
+        # ~90 px; mniejsze marginesy zostawiają miejsce na "POT N" + wartość.
+        lay.setContentsMargins(10, 8, 10, 8)
         lay.setSpacing(4)
 
         title = QLabel(f"POT {idx + 1}", objectName="deckCellTitle")
         title.setAlignment(Qt.AlignLeft)
+        # V1.0.2: Ignored — domyślny minimumSizeHint etykiety (szerokość
+        # tekstu "POT N") blokował skalowanie komórki przy zwężaniu okna.
+        title.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
         self._value_label = QLabel("0", objectName="deckCellValue")
         self._value_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        self._value_label.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
 
         head = QHBoxLayout()
         head.setContentsMargins(0, 0, 0, 0)
@@ -54,6 +60,13 @@ class _PotCell(QFrame):
         self._bar.setValue(0)
         self._bar.setTextVisible(False)
         self._bar.setFixedHeight(6)
+        # V1.0.2: Domyślny minimumSizeHint QProgressBar (111 px) — główny
+        # winowajca sztywnego minimum komórki (149 px → DeckMap 827 px, więcej
+        # niż cały panel treści przy min. oknie). Policy Ignored każe layoutowi
+        # zignorować hint — pasek skaluje się do dowolnej szerokości.
+        # (Uwaga: setMinimumWidth(0) NIE nadpisuje minimumSizeHint — tylko
+        # pozytywne minimum wygrywa z hintem, stąd Ignored.)
+        self._bar.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Fixed)
         self._bar.setStyleSheet("""
             QProgressBar {
                 background: rgba(255, 255, 255, 24);
@@ -100,16 +113,19 @@ class _ButtonCell(QPushButton):
         self.setProperty("pressed", "false")
 
         lay = QVBoxLayout(self)
-        lay.setContentsMargins(14, 10, 14, 10)
+        lay.setContentsMargins(10, 8, 10, 8)
         lay.setSpacing(2)
 
         self._label = QLabel(f"BTN {idx + 1}", objectName="deckCellTitle")
         self._label.setAlignment(Qt.AlignCenter)
+        # V1.0.2: Ignored — nie blokuj skalowania przy małym oknie.
+        self._label.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
         self._label.setAttribute(Qt.WA_TransparentForMouseEvents)
         lay.addWidget(self._label)
 
         self._state_label = QLabel("—")
         self._state_label.setAlignment(Qt.AlignCenter)
+        self._state_label.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
         self._state_label.setAttribute(Qt.WA_TransparentForMouseEvents)
         # V7: precompute oba warianty QSS raz — dawniej build stringa na
         # każdym wciśnięciu (string concat + QSS re-parse).
@@ -163,7 +179,12 @@ class _VolumeBar(QFrame):
 
         for i in range(self._n):
             seg = QFrame()
-            seg.setFixedSize(24, 16)
+            # V1.0.2: Segmenty VU skalują się szerokością (min 8 px) zamiast
+            # sztywnych 24 px — linijka kurczy się razem z oknem zamiast je
+            # rozpychać. Wysokość zostaje stała.
+            seg.setMinimumWidth(8)
+            seg.setFixedHeight(16)
+            seg.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Fixed)
             seg.setProperty("state", "off")
             # Inline QSS fallback (gdy globalny QSS nie ma reguł [state=...])
             seg.setStyleSheet(
@@ -239,8 +260,14 @@ class DeckMap(QFrame):
         # === Tytuł sekcji ===
         title_row = QHBoxLayout()
         title = QLabel("URZĄDZENIE", objectName="sectionTitle")
+        # V1.0.2: Subtitle miał minimumSizeHint ~576 px (długość tekstu) i
+        # rozpychał całą kartę — DeckMap nie dawał się zwęzić poniżej 817 px.
+        # Ignored = etykieta może się skrócić/utnąć zamiast rozpychać panel.
+        # (setMinimumWidth(0) NIE nadpisuje minimumSizeHint.)
         subtitle = QLabel(f"GREJEM Stream Deck  ·  5 pot / 4 btn / {ACTIVE_LED_COUNT} LED bar",
                            objectName="sectionSubtitle")
+        subtitle.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
+        subtitle.setMinimumWidth(0)
         title_row.addWidget(title)
         title_row.addStretch()
         title_row.addWidget(subtitle)

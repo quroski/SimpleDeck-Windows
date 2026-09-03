@@ -11,8 +11,8 @@ from typing import Optional
 
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtWidgets import (QComboBox, QFrame, QHBoxLayout,
-                                QLabel, QScrollArea, QSlider, QVBoxLayout,
-                                QWidget)
+                                QLabel, QScrollArea, QSizePolicy, QSlider,
+                                QVBoxLayout, QWidget)
 
 from ...core.event_bus import EventBus
 from ...core.profile import LedMode, Profile
@@ -78,7 +78,9 @@ class LedPage(QWidget):
         head = QHBoxLayout()
         title_lbl = QLabel("LED", objectName="sectionTitle")
         title_lbl.setStyleSheet("font-size: 22px; font-weight: 700; background: transparent;")
+        # V1.0.2: Ignored — subtitle nie rozpycha strony przy wąskim oknie.
         sub_lbl = QLabel(f"{ACTIVE_LED_COUNT} diody  ·  8 trybów", objectName="sectionSubtitle")
+        sub_lbl.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
         head.addWidget(title_lbl)
         head.addStretch()
         head.addWidget(sub_lbl, alignment=Qt.AlignBottom)

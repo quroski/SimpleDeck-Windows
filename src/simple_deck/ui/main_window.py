@@ -442,22 +442,39 @@ class MainWindow(QMainWindow):
         ekran i — bez uchwytów resize — było nie do zmniejszenia. Teraz:
         1) przywróć ``settings.window_size`` jeśli zapisany i sensowny,
         2) obetnij do availableGeometry aktualnego ekranu.
+
+        V1.0.2 fixes ("okno w niestandardowym rozmiarze"):
+          - Saved sizes are validated against a sane minimum (900x600), so a
+            corrupted / degenerate entry can no longer open a sliver window.
+          - Clamping uses ``min(90%, 90%)`` of available geometry instead of
+            the previous ``-24 px`` hack, so windows open at even, standard
+            proportions on any screen (e.g. 1366x768 → ~1230x655).
+          - Saved sizes that required clamping are *not* silently accepted —
+            clamp result is returned but the caller persists only what the
+            user actually chose (see _flush_settings).
         """
-        w, h = 1280, 800
+        DEFAULT_W, DEFAULT_H = 1280, 800
+        MIN_W, MIN_H = 900, 600   # poniżej tego okno traci użyteczność
+
+        w, h = DEFAULT_W, DEFAULT_H
         saved = getattr(settings, "window_size", None) \
             if settings is not None else None
         if isinstance(saved, (list, tuple)) and len(saved) == 2:
             try:
                 sw, sh = int(saved[0]), int(saved[1])
-                if sw > 0 and sh > 0:
+                if sw >= MIN_W and sh >= MIN_H:
                     w, h = sw, sh
             except (TypeError, ValueError):
                 pass
         if screen is not None:
             avail = screen.availableGeometry()
-            w = min(w, avail.width() - 24)
-            h = min(h, avail.height() - 24)
-        return max(w, 200), max(h, 200)
+            # 90% dostępnego obszaru — pozostawia margines na paski zadań,
+            # docki i tiling; zaokrąglenie do 2 px dla "równych" wartości.
+            max_w = int(avail.width() * 0.9) & ~1
+            max_h = int(avail.height() * 0.9) & ~1
+            w = min(w, max_w)
+            h = min(h, max_h)
+        return max(w, MIN_W), max(h, MIN_H)
 
     def _edges_at(self, pos: QPoint) -> Qt.Edges:
         """Krawędzie okna nakładające się na punkt ``pos`` (wsp. okna).
