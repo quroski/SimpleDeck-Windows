@@ -20,14 +20,15 @@ from ...transport.protocol import (ADC_RANGE, ACTIVE_LED_COUNT,
 # jest niemożliwy bez recoloru, więc celowo neutralny szary→cyan hover.
 _PENCIL_QSS = (
     "QPushButton { background: transparent; border: none; color: #6A7080;"
-    "  font-size: 11px; padding: 0; }"
+    "  font-size: 13px; padding: 0; }"
     "QPushButton:hover { color: #2DD4FF; }"
 )
 # V1.0.3: styl pola edycji nazwy w komórce — dopasowany do glassmorphism.
+# V1.0.3b: font 12px — skala z większymi nazwami (deckCellName).
 _EDIT_QSS = (
     "QLineEdit { background: rgba(13, 15, 23, 200);"
     "  border: 1px solid rgba(45, 212, 255, 120); border-radius: 5px;"
-    "  color: #F5F7FA; font-size: 11px; font-weight: 700; padding: 1px 5px;"
+    "  color: #F5F7FA; font-size: 12px; font-weight: 700; padding: 1px 5px;"
     "  selection-background-color: rgba(45, 212, 255, 90); }"
 )
 
@@ -86,9 +87,10 @@ class _PotCell(QFrame):
         self._title = title
 
         # V1.0.3: przycisk ✎ + pole edycji (startowo ukryte)
+        # V1.0.3b: 18 px — skala z większymi nazwami (deckCellName).
         self._pencil = QPushButton("✎", toolTip="Zmień nazwę")
         self._pencil.setObjectName("deckPencil")
-        self._pencil.setFixedSize(16, 16)
+        self._pencil.setFixedSize(18, 18)
         self._pencil.setCursor(Qt.PointingHandCursor)
         self._pencil.setStyleSheet(_PENCIL_QSS)
         self._pencil.setFocusPolicy(Qt.NoFocus)
@@ -157,8 +159,24 @@ class _PotCell(QFrame):
         if label == self._label:
             return
         self._label = label
-        self._title.setText(label if label else self._default_title)
-        self._title.setToolTip(label if label else self._default_title)
+        self._apply_title_style()
+
+    def _apply_title_style(self) -> None:
+        """V1.0.3b: własna nazwa = wyraźna (deckCellName), domyślna = subtelna.
+
+        Zmiana objectName + unpolish/polish przełącza regułę QSS — własne nazwy
+        są duże (14 px, bold, jasne), domyślne "POT N" pozostają małe i
+        przygaszone, więc na pierwszy rzut oka widać, które kontrolki mają
+        nazwę własną.
+        """
+        name = self._label or self._default_title
+        self._title.setText(name)
+        self._title.setToolTip(name)
+        obj = "deckCellName" if self._label else "deckCellTitle"
+        if self._title.objectName() != obj:
+            self._title.setObjectName(obj)
+            self._title.style().unpolish(self._title)
+            self._title.style().polish(self._title)
 
     def _begin_edit(self) -> None:
         self._title.setVisible(False)
@@ -253,9 +271,10 @@ class _ButtonCell(QPushButton):
         self._title.setAttribute(Qt.WA_TransparentForMouseEvents)
         head.addWidget(self._title, stretch=1)
 
+        # V1.0.3b: 18 px — skala z większymi nazwami (deckCellName).
         self._pencil = QPushButton("✎", self, toolTip="Zmień nazwę")
         self._pencil.setObjectName("deckPencil")
-        self._pencil.setFixedSize(16, 16)
+        self._pencil.setFixedSize(18, 18)
         self._pencil.setCursor(Qt.PointingHandCursor)
         self._pencil.setStyleSheet(_PENCIL_QSS)
         self._pencil.setFocusPolicy(Qt.NoFocus)
@@ -315,8 +334,22 @@ class _ButtonCell(QPushButton):
         if label == self._label:
             return
         self._label = label
-        self._title.setText(label if label else self._default_title)
-        self._title.setToolTip(label if label else self._default_title)
+        self._apply_title_style()
+
+    def _apply_title_style(self) -> None:
+        """V1.0.3b: własna nazwa = wyraźna (deckCellName), domyślna = subtelna.
+
+        Patrz _PotCell._apply_title_style — identyczna zasada: własne nazwy
+        14 px bold jasne, domyślne "BTN N" małe i przygaszone.
+        """
+        name = self._label or self._default_title
+        self._title.setText(name)
+        self._title.setToolTip(name)
+        obj = "deckCellName" if self._label else "deckCellTitle"
+        if self._title.objectName() != obj:
+            self._title.setObjectName(obj)
+            self._title.style().unpolish(self._title)
+            self._title.style().polish(self._title)
 
     def _begin_edit(self) -> None:
         """Włącz tryb edycji nazwy (QLineEdit w miejsce tytułu)."""

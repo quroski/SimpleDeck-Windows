@@ -13,6 +13,7 @@ import json
 
 from simple_deck.core.profile import (ButtonConfig, PotConfig, Profile,
                                       SCHEMA_VERSION)
+from simple_deck.core.event_bus import EventBus
 from simple_deck.ui.widgets.deck_map import DeckMap
 
 
@@ -147,3 +148,156 @@ class TestDeckMapRename:
         deck.set_profile(profile)
         assert deck._pots[4]._title.text() == "Game"
         assert deck._buttons[2]._title.text() == "Screenshots"
+
+    def test_default_title_keeps_subtle_style(self, qapp):
+        """Brak nazwy własnej → deckCellTitle (mała, przygaszona)."""
+        from simple_deck.core.event_bus import EventBus
+        deck = DeckMap(bus=EventBus(), settings=None)
+        cell = deck._pots[0]
+        assert cell._title.objectName() == "deckCellTitle"
+
+    def test_custom_name_gets_prominent_style(self, qapp):
+        """Własna nazwa → deckCellName (duża, jasna) — V1.0.3b."""
+        from simple_deck.core.event_bus import EventBus
+        deck = DeckMap(bus=EventBus(), settings=None)
+        cell = deck._pots[0]
+        cell.set_label("Master")
+        assert cell._title.objectName() == "deckCellName"
+        assert cell._title.text() == "Master"
+
+    def test_clearing_label_reverts_style(self, qapp):
+        """Wyczyszczenie nazwy → powrót do subtelnego deckCellTitle."""
+        from simple_deck.core.event_bus import EventBus
+        deck = DeckMap(bus=EventBus(), settings=None)
+        cell = deck._pots[0]
+        cell.set_label("Master")
+        cell.set_label("")
+        assert cell._title.objectName() == "deckCellTitle"
+        assert cell._title.text() == "POT 1"
+
+
+class TestCrossTabSync:
+    """V1.0.3b: Nazwy synchronizowane między Overview a POTS/PRZYCISKI."""
+
+    def _make_connection(self):
+        from PySide6.QtCore import QObject, Signal as QSignal
+        from simple_deck.transport.connection_manager import ConnectionState
+
+        class Conn(QObject):
+            state_changed = QSignal(object)
+            heartbeat_received = QSignal(object)
+            fw_version_received = QSignal(int, int, int)
+            state = ConnectionState.DISCONNECTED
+
+        return Conn()
+
+    def test_potrow_update_config_refreshes_title(self, qapp):
+        from simple_deck.ui.widgets.config_rows import PotRow
+        row = PotRow(PotConfig(idx=1))
+        assert row._title_lbl.text() == "Potencjometr 2"
+        row.update_config(PotConfig(idx=1, label="Muzyka"))
+        assert row._title_lbl.text() == "Muzyka"
+        # get_config zwraca zaktualizowany config (label nie ginie)
+        assert row.get_config().label == "Muzyka"
+
+    def test_buttonrow_update_config_refreshes_title(self, qapp):
+        from simple_deck.ui.widgets.config_rows import ButtonRow
+        row = ButtonRow(ButtonConfig(idx=2))
+        assert row._title_lbl.text() == "Przycisk 3"
+        row.update_config(ButtonConfig(idx=2, label="PTT"))
+        assert row._title_lbl.text() == "PTT"
+
+    def test_pots_page_refresh_labels(self, qapp):
+        from simple_deck.ui.pages.config_pages import PotsPage
+        from simple_deck.ui.widgets.config_rows import PotRow
+        bus = EventBus()
+        page = PotsPage(bus=bus, connection=self._make_connection())
+        profile = Profile(name="T")
+        profile.pots = [PotConfig(idx=i) for i in range(5)]
+        profile.buttons = [ButtonConfig(idx=i) for i in range(4)]
+        page.set_profile(profile)
+
+        # Symuluj rename w Overview: profil się zmienia, strona się odświeża
+        profile.pots[3].label = "Wentylator"
+        page.refresh_labels()
+
+        # Znajdź wiersz pota 3 (kolejność = pot_display_order, domyślnie identyczność)
+        row3 = None
+        for i in range(1, page._content.count()):
+            w = page._content.itemAt(i).widget()
+            if isinstance(w, PotRow) and w._config.idx == 3:
+                row3 = w
+                break
+        assert row3 is not None
+        assert row3._title_lbl.text() == "Wentylator"
+
+    def test_buttons_page_refresh_labels(self, qapp):
+        from simple_deck.ui.pages.config_pages import ButtonsPage
+        bus = EventBus()
+        page = ButtonsPage(bus=bus, connection=self._make_connection())
+        profile = Profile(name="T")
+        profile.pots = [PotConfig(idx=i) for i in range(5)]
+        profile.buttons = [ButtonConfig(idx=i) for i in range(4)]
+        page.set_profile(profile)
+
+        profile.buttons[0].label = "Push-To-Talk"
+        page.refresh_labels()
+        row0 = page._content.itemAt(1).widget()
+        assert row0._title_lbl.text() == "Push-To-Talk"
+
+    def test_mainwindow_rename_updates_pots_page(self, qapp, bus, mock_connection):
+        """Pełny flow: rename w Overview → karta na POTS pokazuje tę samą nazwę."""
+        from simple_deck.core.settings import Settings
+        from simple_deck.ui.main_window import MainWindow
+        from simple_deck.ui.widgets.config_rows import PotRow
+        win = MainWindow(bus=bus, connection=mock_connection,
+                         settings=Settings())
+        try:
+            profile = Profile(name="T")
+            profile.pots = [PotConfig(idx=i) for i in range(5)]
+            profile.buttons = [ButtonConfig(idx=i) for i in range(4)]
+            win.set_profile(profile)
+
+            # Rename pota 2 przez sygnał z Overview
+            win._page_overview.label_renamed.emit("pot", 2, "Game audio")
+
+            # Karta na niezbudowanej stronie POTS pobierze nazwę przy budowie
+            win._set_page(1)  # buduje i pokazuje PotsPage
+            row2 = None
+            for i in range(1, win._page_pots._content.count()):
+                w = win._page_pots._content.itemAt(i).widget()
+                if isinstance(w, PotRow) and w._config.idx == 2:
+                    row2 = w
+                    break
+            assert row2 is not None
+            assert row2._title_lbl.text() == "Game audio"
+
+            # Rename z istniejącą stroną POTS → natychmiastowa synchronizacja
+            win._page_overview.label_renamed.emit("pot", 2, "Loot")
+            assert row2._title_lbl.text() == "Loot"
+        finally:
+            win.close()
+
+    def test_events_log_uses_custom_names(self, qapp):
+        """Log zdarzeń w Overview używa własnych nazw (spójność między kartami)."""
+        from simple_deck.ui.pages.overview import OverviewPage
+        bus = EventBus()
+        conn = self._make_connection()
+        page = OverviewPage(bus=bus, connection=conn)
+        try:
+            profile = Profile(name="T")
+            profile.pots = [PotConfig(idx=i) for i in range(5)]
+            profile.buttons = [ButtonConfig(idx=i) for i in range(4)]
+            profile.pots[1].label = "Music"
+            page.set_profile(profile)
+            page.show()
+
+            bus.pot_event.emit(1, 2000)
+            bus.button_event.emit(0, True)
+            page._flush_events()
+            text = page._events_log.text()
+            assert "Music" in text
+            assert "BTN 1" in text  # przycisk bez nazwy → default
+            assert "POT 2" not in text  # pot 2 ma nazwę własną
+        finally:
+            page.close()

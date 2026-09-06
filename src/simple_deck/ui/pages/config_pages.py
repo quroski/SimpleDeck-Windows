@@ -156,9 +156,11 @@ class CalibrationDialog(QDialog):
     """
 
     def __init__(self, idx: int, bus: EventBus, current_min: float,
-                 current_max: float, parent=None):
+                 current_max: float, label: str = "", parent=None):
         super().__init__(parent)
-        self.setWindowTitle(f"Kalibracja POT {idx + 1}")
+        # V1.0.3b: tytuł używa własnej nazwy potencjometru (spójność z kartami).
+        display = label.strip() or f"POT {idx + 1}"
+        self.setWindowTitle(f"Kalibracja — {display}")
         self.setModal(True)
         self.setFixedSize(420, 340)
         self._bus = bus
@@ -352,6 +354,21 @@ class PotsPage(_BaseConfigPage):
                     pass
         super()._rebuild_rows()
 
+    def refresh_labels(self) -> None:
+        """V1.0.3b: Synchronizuj tytuły kart z profilem (bez rebuildu).
+
+        Wywoływane po zmianie nazwy kontrolki w Overview — karty na tej stronie
+        muszą pokazywać TE SAME nazwy. Bez rebuildu: nie traci się stanu pól
+        edycji ani nie miga cała strona.
+        """
+        if self._profile is None:
+            return
+        for i in range(1, self._content.count()):
+            item = self._content.itemAt(i)
+            w = item.widget() if item is not None else None
+            if isinstance(w, PotRow) and 0 <= w._config.idx < len(self._profile.pots):
+                w.update_config(self._profile.pots[w._config.idx])
+
     def _on_pot_changed(self, idx: int, cfg: PotConfig) -> None:
         """Aktualizuj profil w pamięci + debounced zapis."""
         if self._profile is not None and 0 <= idx < len(self._profile.pots):
@@ -393,7 +410,7 @@ class PotsPage(_BaseConfigPage):
         dlg = CalibrationDialog(
             idx=idx, bus=self._bus,
             current_min=cfg.min_volume, current_max=cfg.max_volume,
-            parent=self.window())
+            label=cfg.label, parent=self.window())
         if dlg.exec() == QDialog.Accepted:
             new_min, new_max = dlg.get_result()
             cfg.min_volume = new_min
@@ -433,6 +450,16 @@ class ButtonsPage(_BaseConfigPage):
         if self._profile is not None and 0 <= idx < len(self._profile.buttons):
             self._profile.buttons[idx] = cfg
             self._schedule_save()
+
+    def refresh_labels(self) -> None:
+        """V1.0.3b: Synchronizuj tytuły kart z profilem (bez rebuildu)."""
+        if self._profile is None:
+            return
+        for i in range(1, self._content.count()):
+            item = self._content.itemAt(i)
+            w = item.widget() if item is not None else None
+            if isinstance(w, ButtonRow) and 0 <= w._config.idx < len(self._profile.buttons):
+                w.update_config(self._profile.buttons[w._config.idx])
 
 
 # ============================================================

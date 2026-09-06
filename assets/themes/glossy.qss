@@ -522,6 +522,16 @@ QLabel#deckCellTitle {
     text-transform: uppercase;
     background: transparent;
 }
+/* V1.0.3b: WŁASNA nazwa kontrolki (rename w Overview) — wyraźnie większa
+   i jaśniejsza niż domyślny "POT N"/"BTN N" (deckCellTitle), więc od razu
+   widać, które kontrolki mają nadane nazwy. */
+QLabel#deckCellName {
+    font-size: 14px;
+    font-weight: 700;
+    color: #F5F7FA;
+    letter-spacing: 0.3px;
+    background: transparent;
+}
 QLabel#deckCellValue {
     font-size: 18px;
     font-weight: 700;

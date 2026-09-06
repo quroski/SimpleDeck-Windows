@@ -208,25 +208,40 @@ class OverviewPage(QWidget):
     def _on_event(self, *args) -> None:
         """Log ostatnich zdarzeń (pot / button). Throttle ~10 Hz.
 
+        V1.0.3b: używa WŁASNEJ nazwy kontrolki z profilu (spójnie z kartami
+        Device map) zamiast "POT N"/"BTN N" — spójność nazw między kartami.
         V6: append do deque + arm timer; setText następuje w ``_flush_events``
         max co 100 ms — eliminuje 250 setText/s przy wiggle wszystkich potów.
         V7:早期 return gdy strona niewidoczna — eliminuje ~100 deque ops/s +
         timer armów gdy user jest na innej karcie lub zminimalizowany do tray.
-        Gdy użytkownik wróci, pierwszy event odświeża log w ~30 ms.
         """
         if not self.isVisible():
             return
         if len(args) == 2:
+            # V1.0.3b: własna nazwa kontrolki (spójnie z kartami Device map).
+            kind = "btn" if isinstance(args[1], bool) else "pot"
+            name = self._control_name(kind, args[0])
             if isinstance(args[1], bool):
                 idx, pressed = args
-                line = f"BTN {idx + 1}  {'▼ WCIŚNIĘTY' if pressed else '▲ PUSZCZONY'}"
+                line = f"{name}  {'▼ WCIŚNIĘTY' if pressed else '▲ PUSZCZONY'}"
             else:
                 idx, val = args
                 pct = val * 100 // 4095
-                line = f"POT {idx + 1}  →  {val:4d}  ({pct:3d}%)"
+                line = f"{name}  →  {val:4d}  ({pct:3d}%)"
             self._events_history.appendleft(line)
             if not self._event_timer.isActive():
                 self._event_timer.start()
+
+    def _control_name(self, kind: str, idx: int) -> str:
+        """V1.0.3b: nazwa kontrolki do logu zdarzeń (własna lub default)."""
+        try:
+            if kind == "pot":
+                label = self._deck_map._pots[idx]._label
+                return label.strip() or f"POT {idx + 1}"
+            label = self._deck_map._buttons[idx]._label
+            return label.strip() or f"BTN {idx + 1}"
+        except (IndexError, TypeError, AttributeError):
+            return f"{kind.upper()} {idx + 1}"
 
     def _flush_events(self) -> None:
         """Repaint log z deque — wołane przez coalescing timer (max 10 Hz)."""

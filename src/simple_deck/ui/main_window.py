@@ -436,6 +436,13 @@ class MainWindow(QMainWindow):
                 return
         except (IndexError, AttributeError):
             return
+        # V1.0.3b: zsynchronizuj nazwy na już zbudowanych stronach POTS/PRZYCISKI
+        # (bez rebuildu — karty tylko odświeżają tytuł). Niezbudowane strony
+        # pobiorą nazwy z profilu przy pierwszym _build_page → set_profile.
+        if kind == "pot" and self._page_pots is not None:
+            self._page_pots.refresh_labels()
+        elif kind == "btn" and self._page_buttons is not None:
+            self._page_buttons.refresh_labels()
         self._profile_save_timer.start()
 
     def _flush_profile_save(self) -> None:

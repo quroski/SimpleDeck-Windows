@@ -384,6 +384,19 @@ class PotRow(_ConfigRow):
     def get_config(self) -> PotConfig:
         return self._config
 
+    def update_config(self, cfg: PotConfig) -> None:
+        """V1.0.3b: Odśwież tytuł/label bez rebuildu całej strony.
+
+        Wołane gdy nazwa kontrolki zmieni się w Overview — karty na stronach
+        POTENCJOMETRY/PRZYCISKI muszą pokazać to samo. Celowo NIE dotyka pól
+        edycji (combo/slider/app-picker mają własny stan i nie są przeładowywane,
+        by nie zresetować użytkownika w trakcie edycji).
+        """
+        self._config = cfg
+        display = cfg.label.strip() or f"Potencjometr {cfg.idx + 1}"
+        self._title_lbl.setText(display)
+        self._title_lbl.setToolTip(display)
+
     # --- V1.0.3: żywy wskaźnik aktywności ---
     @Slot(int, int)
     def on_pot_event(self, idx: int, value: int) -> None:
@@ -549,3 +562,10 @@ class ButtonRow(_ConfigRow):
 
     def get_config(self) -> ButtonConfig:
         return self._config
+
+    def update_config(self, cfg: ButtonConfig) -> None:
+        """V1.0.3b: Odśwież tytuł/label bez rebuildu strony (patrz PotRow)."""
+        self._config = cfg
+        display = cfg.label.strip() or f"Przycisk {cfg.idx + 1}"
+        self._title_lbl.setText(display)
+        self._title_lbl.setToolTip(display)
