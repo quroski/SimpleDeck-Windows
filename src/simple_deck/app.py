@@ -60,8 +60,8 @@ def _resource_path(rel: str) -> Path:
 def _register_fonts() -> None:
     """Rejestruje fonty z assets/fonts/ w QFontDatabase.
 
-    Gwarantuje identyczną typografię na Windows i Linux — "Inter" jest
-    instalowany systemowo na linuksowej maszynie dev, ale nie na Windows.
+    Gwarantuje identyczną typografię na każdym komputerze — "Inter" nie jest
+    instalowany systemowo na Windows.
 
     V8: Bundleujemy JEDEN font zmienny (InterVariable.ttf ~860 KB) zamiast
     4 statycznych wag (~1.1 MB). Qt 6 natywnie wspiera variable fonts —
@@ -129,16 +129,16 @@ def create_app(argv: Optional[list[str]] = None) -> QApplication:
     """Tworzy QApplication z metadanymi, fontami i ciemną paletą Fusion."""
     if argv is None:
         argv = sys.argv
-    # V7: Wycisz Qt debug logi (font cache probing, QPA platform warnings pod
-    # XWayland, itp.). setdefault by user mógł nadpisać QT_LOGGING_RULES env.
+    # V7: Wycisz Qt debug logi (font cache probing, QPA platform warnings,
+    # itp.). setdefault by user mógł nadpisać QT_LOGGING_RULES env.
     # Zachowuje warnings/errors (tylko *.debug + qt.qpa poniżej warning).
     import os
     os.environ.setdefault("QT_LOGGING_RULES",
                           "*.debug=false;qt.qpa.*=false")
     app = QApplication(argv)
 
-    # Fusion style — identyczny rendering widgetów na Windows i Linux
-    # (bez tego Windows używa 'windowsvista', Linux 'gtk2'/'fusion' → różnice
+    # Fusion style — identyczny rendering widgetów niezależnie od wersji
+    # Windows (bez tego Windows używa 'windowsvista' → różnice
     # w scrollbarach, sliderach, checkboxach, combo boxach, przyciskach).
     app.setStyle("Fusion")
 
@@ -231,7 +231,7 @@ def wire_application(app: QApplication, demo_mode: bool = False,
 
     # 7. Window detector - auto-switch profili (jeśli backend dostępny).
     # V7: Startuj pollera TYLKO gdy użytkownik skonfigurował reguły — gdy
-    # auto_switch_rules == {} (przypadek większości userów), 1 Hz poll X11 +
+    # auto_switch_rules == {} (przypadek większości userów), 1 Hz poll +
     # /proc read to czysty waste. ProfileManager jest nadal gotowy przyjąć
     # reguły (dodane w locie przez SettingsPage), ale sam poller śpi aż do
     # restartu. Większość userów i tak przełącza profile ręcznie.
@@ -385,8 +385,7 @@ def wire_application(app: QApplication, demo_mode: bool = False,
              "available" if hk_ok else "UNAVAILABLE")
     if not hk_ok:
         bus.notify.emit("warning",
-                        "Brak backendu skrótów! Zainstaluj: wtype "
-                        "(dnf install wtype) lub ydotool (dnf install ydotool)")
+                        "Brak backendu skrótów! Skróty klawiszowe nie będą działać.")
     log.info("  window detector  : %s", type(window_backend).__name__)
 
     return window

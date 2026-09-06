@@ -4,17 +4,11 @@ V3 fix: Zamiast focus-based keyPressEvent (który przeciekał do WM i aktywował
 akcje zamiast przechwytywania), używamy modalnego HotkeyCaptureDialog z
 grabKeyboard(). Dialog przechwytuje wszystkie klawisze bez przecieku.
 
-V4: Na Linux/X11 dodatkowo XGrabKey przez python-xlib — grab'uje klawisze na
-poziomie serwera X, więc WM nie widzi kombinacji typu Super+E. Na Wayland /
-Windows fallback do Qt grabKeyboard. Dodatkowo „Wpisz ręcznie…" pozwala
-wpisać combo tekstowo gdy capture nie działa.
-
 Klik w pole → otwiera dialog → użytkownik naciska kombinację → dialog zamyka się
 i ustawia combo w polu. ESC anuluje, Backspace czyści.
 """
 from __future__ import annotations
 
-import sys
 from typing import Optional
 
 from PySide6.QtCore import Qt, QTimer, Signal
@@ -324,33 +318,12 @@ class HotkeyField(QLineEdit):
         self._open_capture_dialog()
 
     def _open_capture_dialog(self) -> None:
-        """Otwórz modalny dialog i ustaw wynik.
-
-        Na Linux/X11 dodatkowo grab'uje klawiaturę na poziomie serwera X
-        (XGrabKey) aby WM nie przechwytywał skrótów typu Super+E.
-        Na Wayland/Windows fallback do Qt grabKeyboard().
-        """
+        """Otwórz modalny dialog i ustaw wynik."""
         dlg = HotkeyCaptureDialog(current_hotkey=self._combo or "", parent=self.window())
-        # X11 keyboard grab (Linux only) — zapobiega przeciekowi skrótów do WM
-        grabber = None
-        if sys.platform.startswith("linux"):
-            try:
-                from ...platform.x11_grab import X11KeyboardGrabber
-                grabber = X11KeyboardGrabber()
-                if not grabber.grab():
-                    grabber = None
-            except Exception:
-                grabber = None
-        _is_linux = sys.platform.startswith("linux")
-        if _is_linux:
-            dlg.grabKeyboard()
         try:
             result = dlg.exec()
         finally:
-            if _is_linux:
-                dlg.releaseKeyboard()
-            if grabber is not None:
-                grabber.release()
+            dlg.releaseKeyboard()
 
         if result == QDialog.Accepted:
             combo = dlg.get_combo()

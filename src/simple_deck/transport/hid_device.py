@@ -193,7 +193,6 @@ class HIDDevice:
                     continue  # timeout - sprawdź _stop_event i próbuj dalej
 
                 # hidapi:
-                #   - Linux: dane to 64-bajtowy payload (Report ID zjedzony przez kernel)
                 #   - Windows: dane mogą zawierać Report ID jako pierwszy bajt
                 raw = bytes(data)
                 if len(raw) == REPORT_SIZE + 1 and raw[0] == HID_REPORT_ID:

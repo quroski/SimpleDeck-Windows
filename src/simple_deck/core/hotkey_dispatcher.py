@@ -6,7 +6,7 @@ Reaguje na zdarzenia z MCU (button_event) i wykonuje powiązane akcje:
   - RUN_COMMAND: uruchom proces systemowy
 
 V6: HOTKEY akcje są uruchamiane w QThreadPool (off-main-thread) — eliminuje
-do 2 s UI stall gdy ``wtype``/``ydotool`` jest powolny. Toast info o sukcesie
+do 2 s UI stall gdy SendInput jest powolny. Toast info o sukcesie
 i toast warning o błędzie są emitowane po powrocie do głównego wątku.
 """
 from __future__ import annotations
@@ -168,51 +168,44 @@ class HotkeyDispatcher(QObject):
         else:
             self._bus.notify.emit(
                 "warning",
-                f"Skrót nie zadziałał: „{combo}".rstrip() + "”. "
-                "Sprawdź czy wtype/ydotool są zainstalowane (dnf install wtype).")
+                f"Skrót nie zadziałał: „{combo}”. "
+                "Sprawdź czy skrót nie jest zajęty przez inny program.")
 
     @staticmethod
     def _set_clipboard(text: str) -> None:
-        """Ustaw tekst w schowku systemowym (Windows ctypes / Linux xclip)."""
-        import sys as _sys
-        if _sys.platform.startswith("win"):
-            import ctypes
-            from ctypes import wintypes
-            user32 = ctypes.WinDLL("user32", use_last_error=True)
-            kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
-            CF_UNICODETEXT = 13
-            GMEM_MOVEABLE = 0x0002
-            user32.OpenClipboard.argtypes = [wintypes.HWND]
-            user32.OpenClipboard.restype = wintypes.BOOL
-            user32.EmptyClipboard.restype = wintypes.BOOL
-            user32.SetClipboardData.argtypes = [wintypes.UINT, wintypes.HANDLE]
-            user32.SetClipboardData.restype = wintypes.HANDLE
-            user32.CloseClipboard.restype = wintypes.BOOL
-            kernel32.GlobalAlloc.argtypes = [wintypes.UINT, ctypes.c_size_t]
-            kernel32.GlobalAlloc.restype = wintypes.HGLOBAL
-            kernel32.GlobalLock.argtypes = [wintypes.HGLOBAL]
-            kernel32.GlobalLock.restype = ctypes.c_void_p
-            kernel32.GlobalUnlock.argtypes = [wintypes.HGLOBAL]
-            kernel32.GlobalUnlock.restype = wintypes.BOOL
-            data = text + "\0"
-            buf = data.encode("utf-16-le")
-            h = kernel32.GlobalAlloc(GMEM_MOVEABLE, len(buf))
-            if not h:
-                raise ctypes.WinError(ctypes.get_last_error())
-            ptr = kernel32.GlobalLock(h)
-            if not ptr:
-                raise ctypes.WinError(ctypes.get_last_error())
-            ctypes.memmove(ptr, buf, len(buf))
-            kernel32.GlobalUnlock(h)
-            if not user32.OpenClipboard(None):
-                raise ctypes.WinError(ctypes.get_last_error())
-            try:
-                user32.EmptyClipboard()
-                user32.SetClipboardData(CF_UNICODETEXT, h)
-            finally:
-                user32.CloseClipboard()
-        else:
-            import subprocess
-            subprocess.run(["xclip", "-selection", "clipboard"],
-                           input=text.encode("utf-8"), check=True,
-                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        """Ustaw tekst w schowku systemowym (Windows ctypes)."""
+        import ctypes
+        from ctypes import wintypes
+        user32 = ctypes.WinDLL("user32", use_last_error=True)
+        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        CF_UNICODETEXT = 13
+        GMEM_MOVEABLE = 0x0002
+        user32.OpenClipboard.argtypes = [wintypes.HWND]
+        user32.OpenClipboard.restype = wintypes.BOOL
+        user32.EmptyClipboard.restype = wintypes.BOOL
+        user32.SetClipboardData.argtypes = [wintypes.UINT, wintypes.HANDLE]
+        user32.SetClipboardData.restype = wintypes.HANDLE
+        user32.CloseClipboard.restype = wintypes.BOOL
+        kernel32.GlobalAlloc.argtypes = [wintypes.UINT, ctypes.c_size_t]
+        kernel32.GlobalAlloc.restype = wintypes.HGLOBAL
+        kernel32.GlobalLock.argtypes = [wintypes.HGLOBAL]
+        kernel32.GlobalLock.restype = ctypes.c_void_p
+        kernel32.GlobalUnlock.argtypes = [wintypes.HGLOBAL]
+        kernel32.GlobalUnlock.restype = wintypes.BOOL
+        data = text + "\0"
+        buf = data.encode("utf-16-le")
+        h = kernel32.GlobalAlloc(GMEM_MOVEABLE, len(buf))
+        if not h:
+            raise ctypes.WinError(ctypes.get_last_error())
+        ptr = kernel32.GlobalLock(h)
+        if not ptr:
+            raise ctypes.WinError(ctypes.get_last_error())
+        ctypes.memmove(ptr, buf, len(buf))
+        kernel32.GlobalUnlock(h)
+        if not user32.OpenClipboard(None):
+            raise ctypes.WinError(ctypes.get_last_error())
+        try:
+            user32.EmptyClipboard()
+            user32.SetClipboardData(CF_UNICODETEXT, h)
+        finally:
+            user32.CloseClipboard()

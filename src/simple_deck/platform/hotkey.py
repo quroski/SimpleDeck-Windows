@@ -1,10 +1,7 @@
 """Hotkey backend - symulacja wciśnięć klawiszy.
 
-Backendi (auto-detected):
+Backend (Windows-only build):
   - Windows: SendInput przez ctypes (user32)
-  - Linux/Wayland: wtype (Wayland-native virtual keyboard)
-  - Linux/any: ydotool (działa wszędzie przez uinput, wymaga ydotoold)
-  - Linux/X11: xdotool (X11-only, nie działa na Wayland)
 
 Format "combo string":
     "Ctrl+Shift+D"     → wciska Ctrl, Shift, D, pakuSC-EE, D ↑, Shift ↑, Ctrl ↑
@@ -12,16 +9,11 @@ Format "combo string":
     "F5"               → klawisz funkcyjny
 
 V4: ``simulate_combo`` zwraca ``bool`` (True = wstrzyknięcie zlecone, False =
-brak backendu / nieznany klawisz / błąd). Błędy są logowane ze stderr zamiast
-trafiać do /dev/null. ``LinuxAutoBackend`` pomija xdotool gdy
-``$XDG_SESSION_TYPE == "wayland"`` (bo i tak nie zadziała).
+brak backendu / nieznany klawisz / błąd).
 """
 from __future__ import annotations
 
 import logging
-import os
-import shutil
-import subprocess
 import sys
 from abc import ABC, abstractmethod
 from typing import Optional
@@ -149,270 +141,12 @@ class WindowsHotkeyBackend(HotkeyBackend):
 
 
 # ============================================================
-# Shared token → evdev/wtype key name mapping
-# ============================================================
-
-_EVDEV_CODES = {
-    "ctrl": 29, "control": 29,
-    "shift": 42,
-    "alt": 56,
-    "super": 125, "win": 125, "meta": 125, "cmd": 125,
-    "tab": 15, "enter": 28, "return": 28, "esc": 1, "escape": 1,
-    "backspace": 14, "delete": 111, "insert": 110,
-    "home": 102, "end": 107, "pageup": 104, "pagedown": 109,
-    "up": 103, "down": 108, "left": 105, "right": 106,
-    "space": 57,
-    "f1": 59, "f2": 60, "f3": 61, "f4": 62, "f5": 63,
-    "f6": 64, "f7": 65, "f8": 66, "f9": 67, "f10": 68,
-    "f11": 87, "f12": 88,
-    "mediaplay": 164, "mediapause": 164, "mediastop": 166,
-    "medianext": 163, "mediaprev": 165,
-    "volup": 115, "voldown": 114, "volmute": 113,
-}
-for _c, _v in zip("abcdefghijklmnopqrstuvwxyz", [30,48,46,32,18,33,34,35,23,36,37,38,50,49,24,25,16,19,31,20,22,47,17,45,21,44]):
-    _EVDEV_CODES[_c] = _v
-for _i, _d in enumerate("0123456789"):
-    _EVDEV_CODES[_d] = 11 + _i if _d != "0" else 11
-
-_WTYPE_NAMES = {
-    "ctrl": "ctrl", "control": "ctrl",
-    "shift": "shift",
-    "alt": "alt",
-    "super": "super", "win": "super", "meta": "super", "cmd": "super",
-    "tab": "tab", "enter": "enter", "return": "enter",
-    "esc": "escape", "escape": "escape",
-    "backspace": "backspace", "delete": "delete", "insert": "insert",
-    "home": "home", "end": "end",
-    "pageup": "pageup", "pagedown": "pagedown",
-    "up": "up", "down": "down", "left": "left", "right": "right",
-    "space": "space",
-    "mediaplay": "XF86AudioPlay", "mediapause": "XF86AudioPause",
-    "mediastop": "XF86AudioStop",
-    "medianext": "XF86AudioNext", "mediaprev": "XF86AudioPrev",
-    "volup": "XF86AudioRaiseVolume",
-    "voldown": "XF86AudioLowerVolume", "volmute": "XF86AudioMute",
-}
-
-
-def _token_to_evdev(token: str) -> Optional[int]:
-    t = token.lower()
-    if t in _EVDEV_CODES:
-        return _EVDEV_CODES[t]
-    if len(token) == 1 and token.upper() in _EVDEV_CODES:
-        return _EVDEV_CODES[token.upper()]
-    return None
-
-
-def _token_to_wtype(token: str) -> str:
-    t = token.lower()
-    if t in _WTYPE_NAMES:
-        return _WTYPE_NAMES[t]
-    if len(token) == 1:
-        return token.lower()
-    if t[0] == "f" and t[1:].isdigit():
-        return token.upper()
-    return token
-
-
-# ============================================================
-# Linux: wtype (Wayland-native virtual keyboard)
-# ============================================================
-class LinuxWtypeBackend(HotkeyBackend):
-    """wtype — Wayland-native virtual keyboard via ext-keyboard-unstable-v1.
-
-    Działa na większości kompozytorów Wayland (Sway, GNOME, KDE, wlroots).
-    Wymaga zainstalowanego 'wtype' w PATH.
-    """
-
-    def __init__(self) -> None:
-        self._have = shutil.which("wtype") is not None
-
-    def available(self) -> bool: return self._have
-
-    def simulate_combo(self, combo: str) -> bool:
-        if not self._have:
-            log.warning("wtype not installed - cannot simulate: %s", combo)
-            return False
-        tokens = [t.strip() for t in combo.split("+") if t.strip()]
-        if not tokens:
-            return False
-        mods = [_token_to_wtype(t) for t in tokens[:-1]]
-        key = _token_to_wtype(tokens[-1])
-        args = ["wtype"]
-        for m in mods:
-            args += ["-M", m]
-        args += ["-k", key]
-        for m in reversed(mods):
-            args += ["-m", m]
-        return _run_capture(args, "wtype")
-
-
-# ============================================================
-# Linux: ydotool (uinput-based, works on both X11 and Wayland)
-# ============================================================
-class LinuxYdotoolBackend(HotkeyBackend):
-    """ydotool — input injection przez /dev/uinput (evdev).
-
-    Działa na X11 i Wayland, ale wymaga:
-      1. 'ydotool' w PATH
-      2. 'ydotoold' daemon uruchomiony
-      3. Uprawnienia do /dev/uinput (lub grupa 'input')
-    """
-
-    def __init__(self) -> None:
-        self._have = shutil.which("ydotool") is not None
-
-    def available(self) -> bool: return self._have
-
-    def simulate_combo(self, combo: str) -> bool:
-        if not self._have:
-            log.warning("ydotool not installed - cannot simulate: %s", combo)
-            return False
-        tokens = [t.strip() for t in combo.split("+") if t.strip()]
-        if not tokens:
-            return False
-        codes = []
-        for t in tokens:
-            c = _token_to_evdev(t)
-            if c is None:
-                log.warning("ydotool: unknown key '%s' in combo '%s'", t, combo)
-                return False
-            codes.append(c)
-        args = ["ydotool", "key"]
-        for c in codes:
-            args.append(f"{c}:1")
-        for c in reversed(codes):
-            args.append(f"{c}:0")
-        return _run_capture(args, "ydotool")
-
-
-# ============================================================
-# Linux: xdotool (X11-only, nie działa na natywnym Wayland)
-# ============================================================
-class LinuxXdotoolBackend(HotkeyBackend):
-    """xdotool — klasyczny backend X11. Nie działa na natywnym Wayland."""
-
-    def __init__(self) -> None:
-        self._have = shutil.which("xdotool") is not None
-
-    def available(self) -> bool: return self._have
-
-    def simulate_combo(self, combo: str) -> bool:
-        if not self._have:
-            log.warning("xdotool not installed - cannot simulate: %s", combo)
-            return False
-        tokens = [t.strip() for t in combo.split("+") if t.strip()]
-        if not tokens:
-            return False
-        arg = "+".join(t if len(t) == 1 else t.lower() for t in tokens)
-        return _run_capture(["xdotool", "key", "--clearmodifiers", arg], "xdotool")
-
-
-# ============================================================
-# Shared subprocess runner — captures stderr for diagnostics
-# ============================================================
-def _run_capture(args: list[str], tag: str, timeout: float = 2.0) -> bool:
-    """Uruchom komendę, przechwyć stdout/stderr, zwróć True przy sukcesie.
-
-    ``subprocess.run`` zamiast ``Popen``: krótki timeout (2 s) i capture_output
-    dają nam diagnostykę gdy backend istnieje w PATH ale np. compositor
-    odrzuca protokół. Wcześniej stderr trafiał do /dev/null i błąd był
-    niewidoczny. Błędy są logowane z tagiem backendu.
-    """
-    try:
-        cp = subprocess.run(args, capture_output=True, timeout=timeout)
-    except FileNotFoundError:
-        log.warning("%s binary vanished mid-run", tag)
-        return False
-    except subprocess.TimeoutExpired:
-        log.warning("%s timed out after %.1fs: %s", tag, timeout, " ".join(args))
-        return False
-    except Exception:
-        log.exception("%s unexpected error", tag)
-        return False
-    if cp.returncode != 0:
-        err = cp.stderr.decode("utf-8", "replace").strip()
-        log.warning("%s exited %d: %s", tag, cp.returncode, err or "(no stderr)")
-        return False
-    return True
-
-
-# ============================================================
-# Auto-detect wrapper (probes backends lazily)
-# ============================================================
-class LinuxAutoBackend(HotkeyBackend):
-    """Auto-detekcja najlepszego dostępnego backendu na Linuksie.
-
-    Kolejność preferencji:
-      1. wtype (Wayland-native, najprostszy)
-      2. ydotool (works everywhere via uinput)
-      3. xdotool (X11-only fallback)
-
-    V4: Na natywnym Wayland (``$XDG_SESSION_TYPE == "wayland"``) xdotool jest
-    celowo pomijany — to narzędzie X11, które na Wayland kompiluje się i startuje
-    ale nie ma jak dotrzeć do compositora. Wcześniej auto-detekcja wybierała
-    xdotool gdy brak wtype/ydotool, simulate_combo wołało binarkę,
-    ``returncode != 0`` trafiał do /dev/null i użytkownik widział ciszę.
-
-    Po pierwszym udanym simulate_combo, zapamiętuje działający backend.
-    """
-
-    def __init__(self) -> None:
-        self._wtype = LinuxWtypeBackend()
-        self._ydotool = LinuxYdotoolBackend()
-        self._xdotool = LinuxXdotoolBackend()
-        self._preferred: Optional[HotkeyBackend] = None
-        self._warned = False
-
-    def _candidates(self) -> list[HotkeyBackend]:
-        """Lista backendów do sprawdzenia, uwzględniająca typ sesji."""
-        session_type = os.environ.get("XDG_SESSION_TYPE", "").lower()
-        on_wayland = session_type == "wayland" or bool(os.environ.get("WAYLAND_DISPLAY"))
-        if on_wayland:
-            # xdotool jest narzędziem X11 — na Wayland nie działa.
-            return [self._wtype, self._ydotool]
-        return [self._wtype, self._ydotool, self._xdotool]
-
-    def _pick(self) -> Optional[HotkeyBackend]:
-        if self._preferred is not None:
-            return self._preferred
-        for backend in self._candidates():
-            if backend.available():
-                self._preferred = backend
-                log.info("hotkey backend: %s", type(backend).__name__)
-                return backend
-        return None
-
-    def simulate_combo(self, combo: str) -> bool:
-        backend = self._pick()
-        if backend is not None:
-            return backend.simulate_combo(combo)
-        if not self._warned:
-            self._warned = True
-            log.error(
-                "No hotkey backend available! Install one of: "
-                "wtype (dnf install wtype), "
-                "ydotool (dnf install ydotool), "
-                "xdotool (dnf install xdotool)")
-        return False
-
-    def available(self) -> bool:
-        return self._pick() is not None
-
-    def backend_name(self) -> str:
-        b = self._pick()
-        return type(b).__name__ if b else "none"
-
-
-# ============================================================
 # Fabryka
 # ============================================================
 def make_hotkey_backend() -> HotkeyBackend:
     try:
         if sys.platform.startswith("win"):
             return WindowsHotkeyBackend()
-        elif sys.platform.startswith("linux"):
-            return LinuxAutoBackend()
         else:
             return NullHotkeyBackend()
     except Exception:

@@ -1,9 +1,7 @@
 """Window Detector - wykrywanie aktywnej aplikacji (Foreground Window).
 
-Backendi:
+Backend (Windows-only build):
   - Windows: GetForegroundWindow + GetWindowText + QueryFullProcessImageName
-  - Linux X11:  EWMH _NET_ACTIVE_WINDOW przez python-xlib
-  - Linux Wayland: best-effort - brak uniwersalnego API (wymaga wtyczki per compositor)
 
 Jeśli backend nie jest dostępny, działa fallback "no-op" (zawsze zwraca pusty
 string) - aplikacja działa, ale auto-switch profili nie.
@@ -34,11 +32,7 @@ class WindowDetectorBackend(ABC):
         ...
 
     def active_window_info(self) -> tuple[str, str]:
-        """Zwraca (process_name, window_title) w jednym wywołaniu.
-
-        V6: Domyślnie woła obie metody osobno, ale backendy które potrafią
-        (np. LinuxX11Backend) nadpisują to by uniknąć podwójnego RPC.
-        """
+        """Zwraca (process_name, window_title) w jednym wywołaniu."""
         return (self.active_process_name(), self.active_window_title())
 
 
@@ -115,174 +109,6 @@ class WindowsBackend(WindowDetectorBackend):
 
 
 # ============================================================
-# Linux X11 (EWMH)
-# ============================================================
-class LinuxX11Backend(WindowDetectorBackend):
-    """Backend Linux/X11 przez python-xlib (EWMH _NET_ACTIVE_WINDOW).
-
-    V6: Atomy są cache'owane w ``__init__`` (intern_atom to RPC do serwera X —
-    dawniej wołane 4× na każdą sekundę). ``active_window_info`` łączy proc +
-    title w jedno zapytanie (dawniej 2× X round-trip / s).
-    """
-
-    def __init__(self) -> None:
-        # V7: ``from Xlib.display import Display`` odroczone do _ensure_display
-        # — oszczędność ~30-60 ms cold-start + ~1 MB RSS do pierwszego pollingu.
-        # Aplikacja bez auto-switch profili (większość userów) nie ładuje Xlib
-        # w ogóle (window_det.start() jest pominięte gdy brak reguł).
-        self._display: Optional[object] = None  # Xlib.display.Display (lazy import)
-        self._root = None  # Xlib window obiekt (przydzielany w _ensure_display)
-        self._atom_active: Optional[int] = None
-        self._atom_pid: Optional[int] = None
-        self._atom_name: Optional[int] = None
-        self._atom_utf8: Optional[int] = None
-        # V7: Cache po wid — gdy aktywne okno się nie zmieni, pomiń rund-trip
-        # o PID i odczyt /proc. Steady-state: 3 X round-trips/s → 1/s.
-        self._last_wid: Optional[int] = None
-        self._last_pid: Optional[int] = None
-        self._last_proc: str = ""
-        self._last_title: str = ""
-        self._init_failed = False
-
-    def _ensure_display(self):
-        """V7: Leniwa inicjalizacja połączenia X11 + cache atomów.
-
-        Pierwsze wywołanie importuje python-xlib i otwiera socket do serwera X.
-        Kolejne wywołania zwracają cached obiekt. Błędy (X unavailable na
-        natywnym Wayland) ustawiają ``_init_failed`` i backend staje się no-op.
-        """
-        if self._init_failed:
-            return None
-        if self._display is None:
-            try:
-                from Xlib.display import Display
-                display = Display()
-                root = display.screen().root
-                # V6: Cache atomów — nigdy się nie zmieniają, a intern_atom to RPC.
-                atom_active = display.intern_atom("_NET_ACTIVE_WINDOW")
-                atom_pid = display.intern_atom("_NET_WM_PID")
-                atom_name = display.intern_atom("_NET_WM_NAME")
-                atom_utf8 = display.intern_atom("UTF8_STRING")
-            except Exception:
-                log.warning("Xlib unavailable — LinuxX11Backend becomes no-op")
-                self._init_failed = True
-                return None
-            self._display = display
-            self._root = root
-            self._atom_active = atom_active
-            self._atom_pid = atom_pid
-            self._atom_name = atom_name
-            self._atom_utf8 = atom_utf8
-        return self._display
-
-    def _active_window(self):
-        disp = self._ensure_display()
-        root = self._root
-        atom_active = self._atom_active
-        if disp is None or root is None or atom_active is None:
-            return None
-        try:
-            reply = root.get_full_property(atom_active, 0)
-            if not reply or not reply.value:
-                return None
-            wid = reply.value[0]
-            # disp is Xlib.display.Display (lazy import; type unknown to static
-            # analysis without python-xlib installed) — getattr keeps the
-            # Optional[object] annotation honest while the call stays dynamic.
-            create_resource = getattr(disp, "create_resource_object")
-            win = create_resource("window", wid)
-
-            # V7: Krótki obieg gdy to samo okno — oszczędza 2 RPC (PID + /proc).
-            if wid == self._last_wid and self._last_pid is not None:
-                return (win, self._last_pid, self._last_proc, self._last_title, True)
-
-            # PID
-            atom_pid = self._atom_pid
-            if atom_pid is None:
-                return None
-            pid_reply = win.get_full_property(atom_pid, 0)
-            pid = pid_reply.value[0] if pid_reply and pid_reply.value else None
-            return (win, pid, None, None, False)
-        except Exception:
-            log.exception("X11 active window query failed")
-            return None
-
-    def active_process_name(self) -> str:
-        info = self._active_window()
-        if not info:
-            return ""
-        _, pid, cached_proc, _, is_cached = info
-        if is_cached:
-            return cached_proc or ""
-        if not pid:
-            return ""
-        try:
-            with open(f"/proc/{pid}/comm", "r") as f:
-                return f.read().strip().lower()
-        except (FileNotFoundError, ProcessLookupError):
-            return ""
-
-    def active_window_title(self) -> str:
-        info = self._active_window()
-        if not info:
-            return ""
-        win, _, _, cached_title, is_cached = info
-        if is_cached:
-            return cached_title or ""
-        atom_name, atom_utf8 = self._atom_name, self._atom_utf8
-        if atom_name is None or atom_utf8 is None:
-            return ""
-        try:
-            r = win.get_full_property(atom_name, atom_utf8)
-            return r.value.decode("utf-8", errors="replace") if r and r.value else ""
-        except Exception:
-            return ""
-
-    def active_window_info(self) -> tuple[str, str]:
-        """V6: Jeden X round-trip zamiast dwóch — proc + title razem.
-
-        V7: Gdy to samo okno co poprzednio — zwróć zcache'owane wartości
-        bez dodatkowych RPC. Steady-state z 3 RPC/s na 1 RPC/s.
-        """
-        info = self._active_window()
-        if not info:
-            self._last_wid = None
-            return ("", "")
-        win, pid, cached_proc, cached_title, is_cached = info
-        if is_cached:
-            return (cached_proc or "", cached_title or "")
-
-        # Proces
-        proc = ""
-        if pid:
-            try:
-                with open(f"/proc/{pid}/comm", "r") as f:
-                    proc = f.read().strip().lower()
-            except (FileNotFoundError, ProcessLookupError):
-                pass
-        # Tytuł
-        title = ""
-        atom_name, atom_utf8 = self._atom_name, self._atom_utf8
-        if atom_name is None or atom_utf8 is None:
-            return (proc, title)
-        try:
-            r = win.get_full_property(atom_name, atom_utf8)
-            title = r.value.decode("utf-8", errors="replace") if r and r.value else ""
-        except Exception:
-            pass
-
-        # V7: Zaktualizuj cache
-        try:
-            self._last_wid = int(win.id)
-        except Exception:
-            pass
-        self._last_pid = pid
-        self._last_proc = proc
-        self._last_title = title
-        return (proc, title)
-
-
-# ============================================================
 # Fabryka
 # ============================================================
 def make_backend() -> WindowDetectorBackend:
@@ -293,10 +119,6 @@ def make_backend() -> WindowDetectorBackend:
     try:
         if sys.platform.startswith("win"):
             return WindowsBackend()
-        elif sys.platform.startswith("linux"):
-            # Spróbuj X11 - LinuxX11Backend.__init__ sam rzuci wyjątek jeśli
-            # X11 niedostępny (Wayland bez XWayland) - złapane przez outer try/except
-            return LinuxX11Backend()
         else:
             log.warning("unsupported platform: %s", sys.platform)
             return NullBackend()
@@ -353,8 +175,6 @@ class WindowDetector(QObject):
 
     def _poll(self) -> None:
         try:
-            # V6: Jeden call do backendu (zamiast dwóch) gdy wspiera
-            # active_window_info — LinuxX11Backend robi 1 X round-trip.
             proc, title = self._backend.active_window_info()
             if proc != self._last_proc or title != self._last_title:
                 self._last_proc = proc

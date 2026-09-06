@@ -426,7 +426,10 @@ class ButtonRow(_ConfigRow):
     test_clicked = Signal(int)      # V3: idx — symuluj wciśnięcie przycisku
 
     def __init__(self, config: ButtonConfig, parent=None):
-        super().__init__(title=f"Przycisk {config.idx + 1}", glyph="◻", parent=parent)
+        # V1.0.4: cyfrowy badge (koło z numerem kanału) — spójnie z PotRow,
+        # zamiast glifu "◻" który wyglądał jak artefakt nad nazwą przycisku.
+        super().__init__(title=f"Przycisk {config.idx + 1}",
+                         glyph="", badge=config.idx + 1, parent=parent)
         self._config = config
         # V1.0.3: tytuł karty pokazuje własną nazwę z Overview (gdy ustawiona).
         display_title = config.label.strip() or f"Przycisk {config.idx + 1}"

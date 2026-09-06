@@ -231,7 +231,7 @@ class TestHotkeyFailureToast:
         disp.set_profile(_profile_with_button(0, hotkey="Ctrl+D"))
         # Symuluj callback z QThreadPool
         disp._on_hotkey_done(False, "Ctrl+D", True)
-        assert any(lvl == "warning" and "wtype" in msg
+        assert any(lvl == "warning" and "Ctrl+D" in msg
                    for lvl, msg in notify_calls), notify_calls
 
     def test_hotkey_success_emits_info(self, qapp, bus):

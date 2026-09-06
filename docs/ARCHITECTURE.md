@@ -6,7 +6,7 @@
 
 ```
 ┌────────────────────────────────────────────────────────────────────┐
-│                         PC (Windows / Linux)                       │
+│                         PC (Windows)                               │
 │                                                                    │
 │  ┌──────────────────────────────────────────────────────────────┐ │
 │  │                  GREJEM OS  (Python + PySide6)                │ │
@@ -28,8 +28,8 @@
 │  │                                │ frame_received                │ │
 │  │   ┌────────────────────────────▼────────────────────────────┐ │ │
 │  │   │   HIDDevice  (wątek daemon)    │  Backendy platformowe   │ │ │
-│  │   │   • hid_write (EP1 OUT)        │  • WASAPI / PulseAudio  │ │ │
-│  │   │   • hid_read  (EP1 IN)         │  • SendInput / xdotool  │ │ │
+│  │   │   • hid_write (EP1 OUT)        │  • WASAPI (pycaw)       │ │ │
+│  │   │   • hid_read  (EP1 IN)         │  • SendInput            │ │ │
 │  │   │   • auto-reconnect             │  • GetForegroundWindow  │ │ │
 │  │   └────────────────────────────────┴────────────────────────┘ │ │
 │  └────────────────────────────────────┬───────────────────────────┘ │
@@ -188,10 +188,9 @@ Profile zapisane w `~/.config/grejem-os/profiles/*.json`. Każdy profil ma
 
 ## 7. Co celowo NIE zaimplementowano (limity)
 
-- **Audio backend Wayland**: tylko PulseAudio-Pulse; natywny PipeWire wymagałby
-  `pywayland` który jest niestabilny. `pulsectl` działa też przez PipeWire-Pulse.
-- **Window detection Wayland**: brak standardowego API; wymaga integracji
-  per-compositor (wlr-foreign-toplevel dla wlroots, D-Bus dla GNOME/KDE).
+- **Zmiana domyślnego urządzenia audio**: wymaga niepublicznego interfejsu
+  `IPolicyConfig`; aplikacja przełącza tylko urządzenie, którym steruje
+  głośność systemowa.
 - **I2C LED expandery**: niepotrzebne — 8 LED na GPIO bezpośrednio (VU bar).
 - **V1 5-LED legacy modes**: V2 protokół wysyła tylko VU_BAR (mode=9). Stare
   tryby OFF/ON/BLINK/DIM/PULSE/BREATHE/STROBE/HEARTBEAT (0–7) są NAK'owane.

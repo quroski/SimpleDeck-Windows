@@ -120,6 +120,11 @@ Wszystkie zależności są deklarowane w [`pyproject.toml`](pyproject.toml) (PEP
   profilu; nazwy pokazują się też na kartach POTENCJOMETRY / PRZYCISKI
 - **V1.0.3**: żywy wskaźnik aktywności potencjometrów na stronie POTENCJOMETRY
   (kropka + % podświetla się przy ruchu fizycznej kontrolki, gaśnie po 1 s)
+- **V1.0.4**: karty przycisków mają numerowany badge (spójnie z kartami
+  potencjometrów) zamiast glifu „◻"; usunięte martwe backendy Linux
+  (xdotool/wtype/ydotool, pulsectl, python-xlib, xclip, autostart .desktop) —
+  aplikacja jest Windows-only; poprawiony toast błędu skrótu i schowek
+  akcji „Wklej tekst" (czysty WinAPI).
 
 ### Audio
 - **Windows**: WASAPI przez `pycaw` (per-process volume)

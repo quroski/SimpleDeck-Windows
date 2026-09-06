@@ -105,8 +105,8 @@ class MainWindow(QMainWindow):
         self.setMinimumSize(820, 520)
         self.resize(*self._initial_size(settings=self._settings,
                                         screen=self.screen()))
-        # V1.3.3: Krawędzie okna reagują na mysz (resize) — mouse tracking dla
-        # fallbacku POSIX; na Windows resize obsługuje WM_NCHITTEST.
+        # V1.3.3: Krawędzie okna reagują na mysz (resize) — mouse tracking
+        # dla fallbacku; na Windows resize obsługuje WM_NCHITTEST.
         self.setMouseTracking(True)
 
         # --- Root widget ---
@@ -272,7 +272,7 @@ class MainWindow(QMainWindow):
             wh = self.windowHandle()
             if wh is not None:
                 # startSystemMove: asynchronicznie prosi OS o przejęcie kontroli
-                # nad pozycją okna. Działa na Windows, X11, Wayland, macOS.
+                # nad pozycją okna.
                 if hasattr(wh, "startSystemMove"):
                     wh.startSystemMove()
                     e.accept()
@@ -592,8 +592,8 @@ class MainWindow(QMainWindow):
     # Dragging fallback (dla Qt < 6.4 bez startSystemMove)
     # ===================================================================
     def mousePressEvent(self, e):
-        # V1.3.3: Klik w strefę krawędzi → systemowy resize (fallback Linux/
-        # Wayland; na Windows robi to WM_NCHITTEST). Event dociera tutaj bo
+        # V1.3.3: Klik w strefę krawędzi → systemowy resize (fallback;
+        # na Windows robi to WM_NCHITTEST). Event dociera tutaj bo
         # marginesy root-widgetu (18/14 px) ignorują mousePress i Qt
         # propaguje je do QMainWindow.
         if e.button() == Qt.LeftButton:

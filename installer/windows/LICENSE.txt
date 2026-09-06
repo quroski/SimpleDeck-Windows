@@ -25,8 +25,7 @@ Simple Deck używa następujących bibliotek trzecich (licencje permissive):
 
   - PySide6 (Qt for Python)        - LGPLv3 / Commercial (The Qt Company)
   - hidapi                          - HIDAPI license (BSD-style / GPLv3)
-  - pycaw (Windows audio)          - MIT
-  - pulsectl (Linux audio)         - MIT
+  - pycaw (Windows audio)           - MIT
 
 Każda z tych bibliotek pozostaje pod swoją licencją. Simple Deck jako całość
 jest dystrybuowany na licencji MIT (powyżej).

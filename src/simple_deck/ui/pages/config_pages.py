@@ -10,7 +10,6 @@ from __future__ import annotations
 import logging
 import re
 import sys
-from pathlib import Path
 from typing import Optional
 
 from PySide6.QtCore import Qt, QTimer, Signal
@@ -1051,34 +1050,7 @@ class SettingsPage(QWidget):
                 finally:
                     key.Close()
                 return True
-            # Linux/macOS: ~/.config/autostart/simple-deck.desktop
-            auto_dir = Path.home() / ".config" / "autostart"
-            entry = auto_dir / "simple-deck.desktop"
-            legacy_entry = auto_dir / "grejem-os.desktop"
-            if enable:
-                auto_dir.mkdir(parents=True, exist_ok=True)
-                launcher = Path.home() / ".local" / "bin" / "simple-deck"
-                entry.write_text(
-                    "[Desktop Entry]\nType=Application\nName=Simple Deck\n"
-                    f"Exec={launcher}\nTerminal=false\nX-GNOME-Autostart-enabled=true\n",
-                    encoding="utf-8")
-                # Wyczyść legacy wpis po aktualizacji z grejem-os.
-                if legacy_entry.exists():
-                    try:
-                        legacy_entry.unlink()
-                    except OSError:
-                        log.warning("nie udało się usunąć legacy autostart: %s",
-                                    legacy_entry)
-            else:
-                if entry.exists():
-                    entry.unlink()
-                if legacy_entry.exists():
-                    try:
-                        legacy_entry.unlink()
-                    except OSError:
-                        log.warning("nie udało się usunąć legacy autostart: %s",
-                                    legacy_entry)
-            return True
+            return False
         except Exception:
             log.exception("autostart apply failed")
             return False
@@ -1185,18 +1157,6 @@ class SettingsPage(QWidget):
                 else:
                     self._notify("error", "Nie znaleziono unins000.exe")
                     return
-            else:
-                # Linux: install.sh --uninstall z katalogu instalatora
-                # Szukaj względem źródła lub w PATH
-                candidates = [
-                    Path(__file__).resolve().parents[5] / "installer" / "linux" / "install.sh",
-                    Path.home() / ".local" / "share" / "grejem-os" / "install.sh",
-                ]
-                inst = next((c for c in candidates if c.exists()), None)
-                if inst is None:
-                    self._notify("error", "Nie znaleziono install.sh")
-                    return
-                subprocess.Popen(["sh", str(inst), "--uninstall"], close_fds=True)
             QApplication.quit()
         except Exception:
             log.exception("uninstall launch failed")
