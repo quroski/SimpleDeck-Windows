@@ -16,6 +16,10 @@ class OverviewPage(QWidget):
     """Strona główna - dashboard."""
 
     pot_clicked = Signal(int)  # klik na potencjometr → MainWindow nawiguje do PotsPage
+    # V1.0.3: klik na komórce przycisku → MainWindow nawiguje do ButtonsPage.
+    button_clicked = Signal(int)
+    # V1.0.3: (kind: "pot"|"btn", idx, nazwa) — edycja nazwy w komórce DeckMap.
+    label_renamed = Signal(str, int, str)
 
     def __init__(self, bus: EventBus, connection: ConnectionManager,
                  settings=None, parent=None):
@@ -57,6 +61,8 @@ class OverviewPage(QWidget):
         # DeckMap - wizualizacja
         self._deck_map = DeckMap(bus=bus, settings=self._settings)
         self._deck_map.pot_clicked.connect(self.pot_clicked)
+        self._deck_map.button_clicked.connect(self.button_clicked)
+        self._deck_map.label_renamed.connect(self.label_renamed)
         lay.addWidget(self._deck_map)
 
         # Ostatnie zdarzenia - karta
@@ -83,6 +89,11 @@ class OverviewPage(QWidget):
 
     def set_profile(self, profile) -> None:
         self._deck_map.set_profile(profile)
+
+    @property
+    def deck_map(self) -> DeckMap:
+        """V1.0.3: dostęp do mapy urządzenia (testy + rename wiring w MainWindow)."""
+        return self._deck_map
 
     # --- Budowa kart ---
     def _build_status_card(self) -> QFrame:

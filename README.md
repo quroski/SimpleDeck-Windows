@@ -116,6 +116,10 @@ Wszystkie zależności są deklarowane w [`pyproject.toml`](pyproject.toml) (PEP
 - 4 przyciski → skrót klawiszowy / toggle-mute / uruchom komendę
 - 8 LED VU bar → wskaźnik głośności (auto-focus na pot, timeout 3 s, fade 300 ms)
 - Auto-switch wg aktywnej aplikacji (np. `discord` → profil Discord)
+- **V1.0.3**: własne nazwy kontrolek — edycja inline (✎) w Overview, zapis w
+  profilu; nazwy pokazują się też na kartach POTENCJOMETRY / PRZYCISKI
+- **V1.0.3**: żywy wskaźnik aktywności potencjometrów na stronie POTENCJOMETRY
+  (kropka + % podświetla się przy ruchu fizycznej kontrolki, gaśnie po 1 s)
 
 ### Audio
 - **Windows**: WASAPI przez `pycaw` (per-process volume)

@@ -6,5 +6,5 @@ Moduł główny aplikacji. Pakiety:
   - platform  : abstrakcje WASAPI/PulseAudio, GetForegroundWindow, SendInput
   - ui        : widgety i strony PySide6 (styl Glassmorphism)
 """
-__version__ = "1.0.2a"
+__version__ = "1.0.3a"
 __all__ = ["__version__"]

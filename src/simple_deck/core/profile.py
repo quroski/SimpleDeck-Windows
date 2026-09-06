@@ -71,6 +71,9 @@ class PotConfig:
     target: str = ""           # nazwa procesu dla APP_VOLUME (puste = system)
     sensitivity: float = 1.0   # mnożnik czułości
     smooth_ui: bool = True
+    # V1.0.3: nazwa własna kontrolki (puste = domyślna "POT N"). Edytowalna
+    # inline w Overview (DeckMap) — czysto kosmetyczna, nie idzie na MCU.
+    label: str = ""
     # --- Ustawienia zaawansowane ---
     curve: str = "linear"       # "linear" | "log" | "exp"
     min_volume: float = 0.0     # dolna granica mapowania (0..1)
@@ -89,11 +92,13 @@ class ButtonConfig:
     target: str = ""           # dla APP_VOLUME / TOGGLE_MUTE / PASTE_TEXT
     on_press: bool = True      # True = reaguj na wciśnięcie, False = na puszczenie
     paste_enter: bool = False  # PASTE_TEXT: naciśnij Enter po wklejeniu
+    # V1.0.3: nazwa własna kontrolki (puste = domyślna "BTN N").
+    label: str = ""
 
 
 # --- Cały profil ---
 
-SCHEMA_VERSION = 4    # V4: pot_display_order; V3: LED modes; V2: VU bar
+SCHEMA_VERSION = 5    # V5: label; V4: pot_display_order; V3: LED modes; V2: VU bar
 
 
 def _identity_order() -> list[int]:
@@ -162,6 +167,8 @@ class Profile:
             target=p.get("target", ""),
             sensitivity=p.get("sensitivity", 1.0),
             smooth_ui=p.get("smooth_ui", True),
+            # V5: label (stare profile schema<5 nie mają pola → "").
+            label=str(p.get("label", "")),
             curve=p.get("curve", "linear") if p.get("curve", "linear") in POT_CURVES else "linear",
             min_volume=max(0.0, min(1.0, float(p.get("min_volume", 0.0)))),
             max_volume=max(0.0, min(1.0, float(p.get("max_volume", 1.0)))),
@@ -174,6 +181,7 @@ class Profile:
             target=b.get("target", ""),
             on_press=b.get("on_press", True),
             paste_enter=b.get("paste_enter", False),
+            label=str(b.get("label", "")),  # V5
         ) for i, b in enumerate(d.get("buttons", []))]
         # V2: stare profile (schema < 2) miały pole "leds" — ignorujemy je (cicha migracja).
         # V3: nowe pola led_mode/led_brightness/led_speed_ms/led_per_led.

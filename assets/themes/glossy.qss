@@ -456,6 +456,65 @@ QFrame#deckCell:hover {
     border: 1px solid rgba(45, 212, 255, 120);
 }
 
+/* V1.0.3: przycisk ✎ (zmiana nazwy) w komórkach DeckMap — subtelny, pojawia
+   się wyraźniej na hover (styl inline w deck_map.py, to tylko dopowiedzenie). */
+QPushButton#deckPencil {
+    background: transparent;
+    border: none;
+    color: #6A7080;
+    font-size: 11px;
+    padding: 0;
+}
+QPushButton#deckPencil:hover {
+    color: #2DD4FF;
+}
+
+/* V1.0.3: pole edycji nazwy w komórce (inline QSS w deck_map.py jest
+   podstawą; reguła globalna spina wygląd gdy styl inline nie dotrze). */
+QLineEdit#deckCellEdit {
+    background: rgba(13, 15, 23, 200);
+    border: 1px solid rgba(45, 212, 255, 120);
+    border-radius: 5px;
+    color: #F5F7FA;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 1px 5px;
+    selection-background-color: rgba(45, 212, 255, 90);
+}
+
+/* V1.0.3: komórka przycisku w trybie edycji nazwy — bez highlightu "pressed",
+   żeby edycja nie wyglądała jak wciśnięcie przycisku. */
+QPushButton#deckButton[editing="true"] {
+    border: 1px solid rgba(255, 255, 255, 24);
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                                stop:0 rgba(255, 255, 255, 26),
+                                stop:0.15 rgba(255, 255, 255, 8),
+                                stop:0.15 rgba(36, 38, 52, 220),
+                                stop:1 rgba(24, 26, 38, 220));
+}
+
+/* ============================ WSKAŹNIK AKTYWNOŚCI (POTS) ================== */
+/* V1.0.3: kropka + wartość % pod tytułem karty na stronie POTENCJOMETRY.
+   Zapala się na każde zdarzenie pot_event danego kanału, gaśnie po 1 s. */
+QLabel#activityDot {
+    background: rgba(255, 255, 255, 30);
+    border-radius: 5px;
+    min-width: 10px;
+    max-width: 10px;
+    min-height: 10px;
+    max-height: 10px;
+}
+QLabel#activityDot[active="true"] {
+    background: qradialgradient(cx:0.5, cy:0.4, radius:0.6,
+                                stop:0 #7DEBFF, stop:0.6 #2DD4FF, stop:1 #1A9FCC);
+}
+QLabel#activityValue {
+    font-size: 11px;
+    color: #6A7080;
+    font-family: "JetBrains Mono", "Consolas", monospace;
+    background: transparent;
+}
+
 QLabel#deckCellTitle {
     font-size: 10px;
     color: #6A7080;

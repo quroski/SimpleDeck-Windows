@@ -12,7 +12,7 @@
 
 #define MyAppName           "Simple Deck"
 #ifndef MyAppVersion
-  #define MyAppVersion      "1.0.2a"
+  #define MyAppVersion      "1.0.3a"
 #endif
 #define MyAppPublisher      "GREJEM INDUSTRIES"
 #define MyAppURL            "https://github.com/grejem-industries/grejem-os"

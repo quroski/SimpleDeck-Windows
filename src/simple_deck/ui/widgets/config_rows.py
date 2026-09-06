@@ -6,7 +6,7 @@ Zawiera listę pól specyficznych dla danego typu kontrolki.
 from __future__ import annotations
 
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import Qt, QTimer, Signal, Slot
 from PySide6.QtWidgets import (QCheckBox, QComboBox, QFrame, QHBoxLayout,
                                 QLabel, QLineEdit, QPushButton, QSizePolicy,
                                 QSlider, QVBoxLayout,
@@ -26,6 +26,10 @@ class _ConfigRow(QFrame):
         super().__init__(parent)
         self.setObjectName("card")
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        # V1.0.3: referencja do etykiety tytułu (PotRow/ButtonRow zmieniają
+        # tekst gdy kontrolka ma własną nazwę z Overview). Zawsze ustawiana
+        # niżej w __init__, zanim subklasa z niej skorzysta.
+        self._title_lbl: QLabel
 
         outer = QHBoxLayout(self)
         outer.setContentsMargins(20, 16, 20, 16)
@@ -52,6 +56,7 @@ class _ConfigRow(QFrame):
         title_lbl.setStyleSheet("font-size: 14px;")
         self._left_col.addWidget(glyph_lbl, alignment=Qt.AlignCenter)
         self._left_col.addWidget(title_lbl)
+        self._title_lbl = title_lbl
         outer.addLayout(self._left_col)
 
         # Separator
@@ -66,6 +71,68 @@ class _ConfigRow(QFrame):
         self._fields_layout.setSpacing(10)
         outer.addLayout(self._fields_layout, stretch=1)
 
+    # --- V1.0.3: żywy wskaźnik aktywności (dot + wartość %) ---
+    _IDLE_AFTER_MS = 1000  # po 1 s bez ruchu kontrolka wraca do stanu "idle"
+
+    def _build_activity_indicator(self) -> None:
+        """Dodaj pod tytułem kropkę aktywności + wartość liczbową.
+
+        Dot zapala się (QSS property ``active=true``) na każdy event
+        bus.pot_event/button_event tej kontrolki i gaśnie po 1 s bezczynności
+        — użytkownik od razu widzi, KTÓRĄ fizyczną kontrolkę właśnie rusza.
+        """
+        act_row = QHBoxLayout()
+        act_row.setContentsMargins(0, 0, 0, 0)
+        act_row.setSpacing(6)
+        self._activity_dot = QLabel("", objectName="activityDot")
+        self._activity_dot.setProperty("active", "false")
+        self._activity_dot.setFixedSize(10, 10)
+        self._activity_dot.setToolTip("Podświetlenie = kontrolka w użyciu")
+        self._activity_value = QLabel("—", objectName="activityValue")
+        self._activity_value.setStyleSheet(
+            "font-family: 'JetBrains Mono', 'Consolas', monospace;"
+            "font-size: 11px; color: #6A7080; background: transparent;"
+        )
+        act_row.addWidget(self._activity_dot, 0, Qt.AlignHCenter)
+        act_row.addWidget(self._activity_value, 0, Qt.AlignHCenter)
+        act_row.addStretch()
+        self._left_col.addLayout(act_row)
+
+        # Timer wygaszający wskaźnik (single-shot, restart na każdy event).
+        self._activity_timer = QTimer(self)
+        self._activity_timer.setSingleShot(True)
+        self._activity_timer.setInterval(self._IDLE_AFTER_MS)
+        self._activity_timer.timeout.connect(self._activity_off)
+
+        # Cache ostatniego stanu by nie polishować co event (250 Hz wiggle).
+        self._activity_active = False
+        self._last_activity_text = ""
+
+    def _activity_on(self, text: str) -> None:
+        """Zapal wskaźnik (property + polish tylko przy ZMIANIE stanu)."""
+        if not self._activity_active:
+            self._activity_active = True
+            self._activity_dot.setProperty("active", "true")
+            # QSS re-eval wymaga unpolish/polish — tylko przy przełączeniu stanu,
+            # nie na każdy event (500 Hz wiggle = wcześniej ~1500 polish/s).
+            self._activity_dot.style().unpolish(self._activity_dot)
+            self._activity_dot.style().polish(self._activity_dot)
+        if text != self._last_activity_text:
+            self._last_activity_text = text
+            self._activity_value.setText(text)
+        self._activity_timer.start()
+
+    def _activity_off(self) -> None:
+        """Zgaś wskaźnik po bezczynności."""
+        if not self._activity_active:
+            return
+        self._activity_active = False
+        self._activity_dot.setProperty("active", "false")
+        self._activity_dot.style().unpolish(self._activity_dot)
+        self._activity_dot.style().polish(self._activity_dot)
+        self._activity_value.setText("—")
+        self._last_activity_text = ""
+
     def _add_field(self, label: str, widget: QWidget) -> None:
         """Dodaj pole: [mała etykieta] [widget]"""
         row = QHBoxLayout()
@@ -78,7 +145,13 @@ class _ConfigRow(QFrame):
 
 
 class PotRow(_ConfigRow):
-    """Wiersz konfiguracji potencjometru (z sekcją zaawansowaną)."""
+    """Wiersz konfiguracji potencjometru (z sekcją zaawansowaną).
+
+    V1.0.3: pod tytułem karty jest żywy wskaźnik aktywności — kropka
+    podświetla się na każde zdarzenie bus.pot_event tego kanału (i gaśnie
+    po 1 s bezczynności). Pozwala zidentyfikować fizyczny potencjometr bez
+    sondowania wartości na innych kartach.
+    """
 
     changed = Signal(int, object)       # idx, PotConfig
     calibrate_requested = Signal(int)    # V3: idx — kalibruj min/max
@@ -101,6 +174,12 @@ class PotRow(_ConfigRow):
                          badge=config.idx + 1, parent=parent)
         self._config = config
         self._settings = settings
+        # V1.0.3: tytuł karty pokazuje własną nazwę z Overview (gdy ustawiona).
+        display_title = config.label.strip() or f"Potencjometr {config.idx + 1}"
+        self._title_lbl.setText(display_title)
+        self._title_lbl.setToolTip(display_title)
+        # V1.0.3: wskaźnik aktywności (dot + %) pod tytułem.
+        self._build_activity_indicator()
 
         # V4: Przyciski zmiany kolejności (góra / dół) pod badge'em.
         btn_row = QHBoxLayout()
@@ -291,6 +370,7 @@ class PotRow(_ConfigRow):
             min_volume=lo,
             max_volume=hi,
             invert=self._invert.isChecked(),
+            label=self._config.label,  # V1.0.3: nie gub nazwy z Overview
         )
         self._config = cfg
         self.changed.emit(cfg.idx, cfg)
@@ -304,6 +384,27 @@ class PotRow(_ConfigRow):
     def get_config(self) -> PotConfig:
         return self._config
 
+    # --- V1.0.3: żywy wskaźnik aktywności ---
+    @Slot(int, int)
+    def on_pot_event(self, idx: int, value: int) -> None:
+        """Odbierz bus.pot_event(idx, adc) — zapal dot dla SWOJEGO kanału.
+
+        Podłączane przez PotsPage._populate_rows (filtr idx). Eventy innych
+        potów są ignorowane bez kosztu (pierwsza linijka — early return).
+        """
+        if idx != self._config.idx:
+            return
+        pct = max(0, min(100, value * 100 // 4095))
+        self._activity_on(f"{pct:3d}%")
+
+    def on_button_event(self, idx: int, pressed: bool) -> None:
+        """Sygnaturowy odpowiednik dla button_event — no-op (doty do potów).
+
+        Istnieje, by ewentualny wspólny hookup nie musiał rozdzielać sygnałów;
+        PotsPage podłącza wyłącznie bus.pot_event.
+        """
+        del idx, pressed
+
 
 class ButtonRow(_ConfigRow):
     """Wiersz konfiguracji przycisku."""
@@ -314,6 +415,10 @@ class ButtonRow(_ConfigRow):
     def __init__(self, config: ButtonConfig, parent=None):
         super().__init__(title=f"Przycisk {config.idx + 1}", glyph="◻", parent=parent)
         self._config = config
+        # V1.0.3: tytuł karty pokazuje własną nazwę z Overview (gdy ustawiona).
+        display_title = config.label.strip() or f"Przycisk {config.idx + 1}"
+        self._title_lbl.setText(display_title)
+        self._title_lbl.setToolTip(display_title)
 
         # Akcja
         self._action_combo = QComboBox()
@@ -437,6 +542,7 @@ class ButtonRow(_ConfigRow):
             target=target,
             on_press=self._on_press.isChecked(),
             paste_enter=self._paste_enter.isChecked() if action == ButtonAction.PASTE_TEXT else False,
+            label=self._config.label,  # V1.0.3: nie gub nazwy z Overview
         )
         self._config = cfg
         self.changed.emit(cfg.idx, cfg)

@@ -333,7 +333,24 @@ class PotsPage(_BaseConfigPage):
             row.changed.connect(self._on_pot_changed)
             row.calibrate_requested.connect(self._on_calibrate)
             row.move_requested.connect(self._on_move_requested)
+            # V1.0.3: żywy wskaźnik aktywności — dot gaśnie przy ruchu pota.
+            self._bus.pot_event.connect(row.on_pot_event)
             self._content.addWidget(row)
+
+    def _rebuild_rows(self) -> None:
+        """Nadpisane — odłącz żywe wskaźniki starych wierszy przed usunięciem."""
+        # V1.0.3: przy rebuildzie stare PotRow są deleteLater() — Qt rozłącza
+        # sloty automatycznie PO zniszczeniu, ale między rebuild a destroy
+        # sloty potrafią wpaść na martwych widgetach. Odłącz jawnie.
+        for i in range(1, self._content.count()):
+            item = self._content.itemAt(i)
+            w = item.widget() if item is not None else None
+            if isinstance(w, PotRow):
+                try:
+                    self._bus.pot_event.disconnect(w.on_pot_event)
+                except (RuntimeError, TypeError):
+                    pass
+        super()._rebuild_rows()
 
     def _on_pot_changed(self, idx: int, cfg: PotConfig) -> None:
         """Aktualizuj profil w pamięci + debounced zapis."""

@@ -21,7 +21,7 @@ import sys
 from pathlib import Path
 from typing import Optional
 
-from PySide6.QtCore import Qt, QPoint, Signal
+from PySide6.QtCore import Qt, QPoint, QTimer, Signal
 from PySide6.QtGui import QColor, QMouseEvent
 from PySide6.QtWidgets import (QApplication, QFrame, QGraphicsDropShadowEffect,
                                 QHBoxLayout, QLabel, QMainWindow, QPushButton,
@@ -165,6 +165,10 @@ class MainWindow(QMainWindow):
 
         # Klik na potencjometr w Overview → nawigacja do PotsPage
         self._page_overview.pot_clicked.connect(lambda *_: self._set_page(1))
+        # V1.0.3: klik na komórce przycisku w Overview → nawigacja do ButtonsPage
+        self._page_overview.button_clicked.connect(lambda *_: self._set_page(2))
+        # V1.0.3: edycja nazwy kontrolki w Overview → profil + debounced save
+        self._page_overview.label_renamed.connect(self._on_label_renamed)
 
         # Status wiring
         self._conn.state_changed.connect(self._on_state_changed)
@@ -172,6 +176,13 @@ class MainWindow(QMainWindow):
 
         # Akcent: zastosuj na starcie (QSS + ikony) i słuchaj zmian ze Settings
         self.apply_accent(self._accent)
+
+        # Debounced zapis profilu po zmianach z Overview (rename nazw kontrolek).
+        # Wzorzec jak w _BaseConfigPage: single-shot 500 ms po OSTATNIEJ zmianie.
+        self._profile_save_timer = QTimer(self)
+        self._profile_save_timer.setSingleShot(True)
+        self._profile_save_timer.setInterval(500)
+        self._profile_save_timer.timeout.connect(self._flush_profile_save)
 
         # Toast host - nietrwałe powiadomienia
         self._toast_host = ToastHost(self._bus, self, settings=self._settings, parent=self)
@@ -405,6 +416,38 @@ class MainWindow(QMainWindow):
         self._ensure_page(idx)
         if 0 <= idx < self._stack.count():
             self._stack.setCurrentIndex(idx)
+
+    def _on_label_renamed(self, kind: str, idx: int, label: str) -> None:
+        """V1.0.3: Zapisz własną nazwę kontrolki z Overview do profilu.
+
+        kind: "pot" | "btn". Pusta nazwa = wróć do domyślnej ("POT N"/"BTN N").
+        Karty na stronach POTS/PRZYCISKI pokazują badge z numerem kanału, więc
+        nie wymagają rebuildu — tylko zapis profilu (debounced).
+        """
+        profile = self._current_profile
+        if profile is None:
+            return
+        try:
+            if kind == "pot" and 0 <= idx < len(profile.pots):
+                profile.pots[idx].label = label
+            elif kind == "btn" and 0 <= idx < len(profile.buttons):
+                profile.buttons[idx].label = label
+            else:
+                return
+        except (IndexError, AttributeError):
+            return
+        self._profile_save_timer.start()
+
+    def _flush_profile_save(self) -> None:
+        """Zapisz profil po wygaśnięciu debounce (rename nazw z Overview)."""
+        if self._profile_mgr is None or self._current_profile is None:
+            return
+        try:
+            self._profile_mgr.save(self._current_profile)
+            log.debug("profile '%s' saved (label rename)",
+                      self._current_profile.name)
+        except Exception:
+            log.exception("profile save failed")
 
     def _on_state_changed(self, state: ConnectionState) -> None:
         self._status_chip.set_state(state)
