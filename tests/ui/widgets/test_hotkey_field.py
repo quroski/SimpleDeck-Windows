@@ -41,6 +41,12 @@ class TestNormalizeToken:
         ("f5", "F5"),
         ("F12", "F12"),
         ("f1", "F1"),
+        # Rozszerzone funkcyjne V1.0.5 (poza normalnym zakresem)
+        ("f13", "F13"),
+        ("F24", "F24"),
+        ("f18", "F18"),
+        # Poza zakresem — fallback capitalize (nie "F25")
+        ("f25", "F25"),
         # Multimedia
         ("mediaplay", "MediaPlay"),
         ("volup", "VolUp"),

@@ -83,6 +83,42 @@ class PotConfig:
 
 POT_CURVES = ("linear", "log", "exp", "gamma", "s-curve")
 
+# V6: dozwolone tryby skrótu przycisku.
+HOTKEY_MODES = ("combo", "fkey")
+
+_FKEY_MODIFIERS = frozenset({"ctrl", "control", "shift", "alt", "super", "win",
+                             "meta", "menu", "altgr"})
+
+
+def _is_fkey_token(token: str) -> bool:
+    """True gdy token to klawisz funkcyjny F13–F24."""
+    t = token.strip().lower()
+    return t.startswith("f") and t[1:].isdigit() and 13 <= int(t[1:]) <= 24
+
+
+def _infer_hotkey_mode(hotkey: str) -> str:
+    """Wywnioskuj tryb skrótu z zapisanego combo (migracja profili v5 → v6).
+
+    "fkey" gdy combo zawiera F13–F24 i składa się wyłącznie z modyfikatorów
+    oraz klawiszy funkcyjnych; w przeciwnym razie "combo".
+    """
+    tokens = [t for t in (hotkey or "").split("+") if t.strip()]
+    if not tokens:
+        return "combo"
+    if (all(_is_fkey_token(t) or t.strip().lower() in _FKEY_MODIFIERS
+            for t in tokens)
+            and any(_is_fkey_token(t) for t in tokens)):
+        return "fkey"
+    return "combo"
+
+
+def _validate_hotkey_mode(mode: str, hotkey: str) -> str:
+    """Zwróć poprawny hotkey_mode; przy braku pola inferuj z hotkeya."""
+    m = (mode or "").strip().lower()
+    if m in HOTKEY_MODES:
+        return m
+    return _infer_hotkey_mode(hotkey)
+
 
 @dataclass(slots=True)
 class ButtonConfig:
@@ -94,11 +130,14 @@ class ButtonConfig:
     paste_enter: bool = False  # PASTE_TEXT: naciśnij Enter po wklejeniu
     # V1.0.3: nazwa własna kontrolki (puste = domyślna "BTN N").
     label: str = ""
+    # V6: tryb skrótu dla HOTKEY — "combo" = dowolny skrót klawiaturowy,
+    # "fkey" = klawisz funkcyjny spoza normalnego zakresu (F13–F24).
+    hotkey_mode: str = "combo"
 
 
 # --- Cały profil ---
 
-SCHEMA_VERSION = 5    # V5: label; V4: pot_display_order; V3: LED modes; V2: VU bar
+SCHEMA_VERSION = 6    # V6: hotkey_mode; V5: label; V4: pot_display_order; V3: LED modes; V2: VU bar
 
 
 def _identity_order() -> list[int]:
@@ -182,6 +221,10 @@ class Profile:
             on_press=b.get("on_press", True),
             paste_enter=b.get("paste_enter", False),
             label=str(b.get("label", "")),  # V5
+            # V6: tryb skrótu ("combo"|"fkey"). Stare profile nie mają pola →
+            # infer z hotkeya (F13–F24 → "fkey"), reszta → "combo".
+            hotkey_mode=_validate_hotkey_mode(
+                str(b.get("hotkey_mode", "")), str(b.get("hotkey", ""))),
         ) for i, b in enumerate(d.get("buttons", []))]
         # V2: stare profile (schema < 2) miały pole "leds" — ignorujemy je (cicha migracja).
         # V3: nowe pola led_mode/led_brightness/led_speed_ms/led_per_led.

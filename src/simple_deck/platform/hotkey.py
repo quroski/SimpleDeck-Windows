@@ -65,6 +65,10 @@ class WindowsHotkeyBackend(HotkeyBackend):
         "f1": 0x70, "f2": 0x71, "f3": 0x72, "f4": 0x73, "f5": 0x74,
         "f6": 0x75, "f7": 0x76, "f8": 0x77, "f9": 0x78, "f10": 0x79,
         "f11": 0x7A, "f12": 0x7B,
+        # V1.0.5: rozszerzone klawisze funkcyjne (poza normalnym zakresem)
+        "f13": 0x7C, "f14": 0x7D, "f15": 0x7E, "f16": 0x7F,
+        "f17": 0x80, "f18": 0x81, "f19": 0x82, "f20": 0x83,
+        "f21": 0x84, "f22": 0x85, "f23": 0x86, "f24": 0x87,
         "mediaplay": 0xB3, "mediapause": 0xB3,
         "medianext": 0xB0, "mediaprev": 0xB1,
         "volup": 0xAF, "voldown": 0xAE, "volmute": 0xAD,

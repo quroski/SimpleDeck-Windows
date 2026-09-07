@@ -131,3 +131,110 @@ class TestButtonRowRunCommand:
         row._action_combo.setCurrentIndex(2)  # RUN_COMMAND
         assert row._hotkey_row.isHidden() is True
         assert row._command_row.isHidden() is False
+
+
+class TestButtonRowHotkeyMode:
+    """V1.0.5: tryb skrótu — combo (dialog) vs klawisz funkcyjny F13–F24."""
+
+    def test_default_mode_is_combo(self, qapp):
+        cfg = ButtonConfig(idx=0, hotkey="Ctrl+D")
+        row = ButtonRow(cfg)
+        assert cfg.hotkey_mode == "combo"
+        assert row._mode_combo.currentData() == "combo"
+        assert row._hotkey_row.isHidden() is False
+        assert row._fkey_row.isHidden() is True
+
+    def test_mode_combo_visible_on_hotkey_only(self, qapp):
+        row = ButtonRow(ButtonConfig(idx=0, action=ButtonAction.HOTKEY))
+        assert row._mode_row.isHidden() is False
+        row2 = ButtonRow(ButtonConfig(idx=0, action=ButtonAction.RUN_COMMAND))
+        assert row2._mode_row.isHidden() is True
+
+    def test_switch_to_fkey_builds_hotkey(self, qapp):
+        cfg = ButtonConfig(idx=1, hotkey="Ctrl+D")
+        row = ButtonRow(cfg)
+        emitted = MagicMock()
+        row.changed.connect(emitted)
+        # Przełącz tryb → F13 (domyślny w combo F-key)
+        row._mode_combo.setCurrentIndex(1)
+        assert emitted.called
+        _, new_cfg = emitted.call_args[0]
+        assert new_cfg.hotkey_mode == "fkey"
+        assert new_cfg.hotkey == "F13"
+        assert row._fkey_row.isHidden() is False
+        assert row._hotkey_row.isHidden() is True
+
+    def test_fkey_with_modifiers(self, qapp):
+        cfg = ButtonConfig(idx=0, hotkey_mode="fkey", hotkey="Ctrl+F13")
+        row = ButtonRow(cfg)
+        assert row._mode_combo.currentData() == "fkey"
+        assert row._fkey_combo.currentText() == "F13"
+        assert row._fkey_ctrl.isChecked() is True
+        assert row._fkey_shift.isChecked() is False
+        emitted = MagicMock()
+        row.changed.connect(emitted)
+        row._fkey_shift.setChecked(True)
+        _, new_cfg = emitted.call_args[0]
+        assert new_cfg.hotkey == "Ctrl+Shift+F13"
+        assert new_cfg.hotkey_mode == "fkey"
+
+    def test_fkey_selection_change(self, qapp):
+        cfg = ButtonConfig(idx=0, hotkey_mode="fkey", hotkey="F24")
+        row = ButtonRow(cfg)
+        assert row._fkey_combo.currentText() == "F24"
+        emitted = MagicMock()
+        row.changed.connect(emitted)
+        row._fkey_combo.setCurrentText("F15")
+        _, new_cfg = emitted.call_args[0]
+        assert new_cfg.hotkey == "F15"
+
+    def test_mode_preserved_on_unrelated_change(self, qapp):
+        """Regresja: przebudowa configu w _on_changed nie może gubić trybu."""
+        cfg = ButtonConfig(idx=0, hotkey_mode="fkey", hotkey="Ctrl+F13",
+                           label="Mikrofon")
+        row = ButtonRow(cfg)
+        emitted = MagicMock()
+        row.changed.connect(emitted)
+        row._on_press.setChecked(False)  # niezwiązana zmiana
+        _, new_cfg = emitted.call_args[0]
+        assert new_cfg.hotkey_mode == "fkey"
+        assert new_cfg.hotkey == "Ctrl+F13"  # zapisany F-key nie ginie
+        assert new_cfg.label == "Mikrofon"
+
+    def test_switch_back_to_combo_restores_field_value(self, qapp):
+        cfg = ButtonConfig(idx=0, hotkey="Ctrl+D")
+        row = ButtonRow(cfg)
+        row._mode_combo.setCurrentIndex(1)   # → fkey
+        row._mode_combo.setCurrentIndex(0)   # → z powrotem combo
+        assert row._hotkey_field.value() == "Ctrl+D"
+        assert row.get_config().hotkey_mode == "combo"
+        assert row.get_config().hotkey == "Ctrl+D"
+
+    def test_action_change_keeps_fkey_widgets_consistent(self, qapp):
+        cfg = ButtonConfig(idx=0, hotkey_mode="fkey", hotkey="F13")
+        row = ButtonRow(cfg)
+        row._action_combo.setCurrentIndex(4)  # Brak (NONE)
+        assert row._fkey_row.isHidden() is True
+        assert row._mode_row.isHidden() is True
+
+
+class TestConfigRowLeftColumn:
+    """V1.0.5: kolumna badge+nazwa o stałej szerokości — Przyciski i
+    Potencjometry dzielą kartę identycznie (niezależnie od długości nazwy)."""
+
+    def test_left_column_fixed_width(self, qapp):
+        row = ButtonRow(ButtonConfig(idx=0))
+        assert row._left_widget.minimumWidth() == 180
+        assert row._left_widget.maximumWidth() == 180
+
+    def test_button_and_pot_rows_equal_column_width(self, qapp):
+        from simple_deck.core.profile import PotConfig
+        from simple_deck.ui.widgets.config_rows import PotRow
+        btn_row = ButtonRow(ButtonConfig(idx=0))
+        pot_row = PotRow(PotConfig(idx=0))
+        assert (btn_row._left_widget.minimumWidth()
+                == pot_row._left_widget.minimumWidth())
+
+    def test_title_wraps_instead_of_stretching(self, qapp):
+        row = ButtonRow(ButtonConfig(idx=0, label="Bardzo długa nazwa kontrolki z Overview"))
+        assert row._title_lbl.wordWrap() is True

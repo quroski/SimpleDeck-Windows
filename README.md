@@ -125,6 +125,12 @@ Wszystkie zależności są deklarowane w [`pyproject.toml`](pyproject.toml) (PEP
   (xdotool/wtype/ydotool, pulsectl, python-xlib, xclip, autostart .desktop) —
   aplikacja jest Windows-only; poprawiony toast błędu skrótu i schowek
   akcji „Wklej tekst" (czysty WinAPI).
+- **V1.0.5**: kolumna badge + nazwa na stronach PRZYCISKI i POTENCJOMETRY ma
+  stałą szerokość — karty dzielą się identycznie na obu stronach; nowa opcja
+  „Klawisz funkcyjny (F13–F24)" dla przycisków (Typ skrótu) — klawisze poza
+  normalnym zakresem klawiatury z opcjonalnymi Ctrl/Shift/Alt (profil schema v6,
+  stare profile migrują automatycznie; F13–F24 działa też przy ręcznym wpisie
+  skrótu).
 
 ### Audio
 - **Windows**: WASAPI przez `pycaw` (per-process volume)

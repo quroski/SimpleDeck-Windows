@@ -175,6 +175,63 @@ class TestProfileSaveLoadRoundtrip:
         assert loaded.led_mode == LedMode.VU_BAR.value  # domyślny
         assert loaded.led_brightness == 255
 
+    def test_v5_profile_hotkey_mode_defaults_combo(self, qapp, tmp_home):
+        """V5→V6: profil bez hotkey_mode dostaje 'combo' (stare przyciski)."""
+        old_data = {
+            "name": "V5Profile",
+            "schema_version": 5,
+            "buttons": [{"idx": 0, "action": "hotkey", "hotkey": "Ctrl+Shift+D"}],
+        }
+        path = ProfileManager().directory / "V5Profile.json"
+        path.write_text(json.dumps(old_data), encoding="utf-8")
+
+        loaded = ProfileManager().load("V5Profile")
+        assert loaded is not None
+        assert loaded.schema_version == SCHEMA_VERSION
+        assert loaded.buttons[0].hotkey_mode == "combo"
+
+    def test_v5_profile_fkey_inferred(self, qapp, tmp_home):
+        """V5→V6: hotkey F13–F24 w starym profilu → infer 'fkey'."""
+        old_data = {
+            "name": "V5Fkey",
+            "schema_version": 5,
+            "buttons": [
+                {"idx": 0, "action": "hotkey", "hotkey": "Ctrl+F13"},
+                {"idx": 1, "action": "hotkey", "hotkey": "F24"},
+            ],
+        }
+        path = ProfileManager().directory / "V5Fkey.json"
+        path.write_text(json.dumps(old_data), encoding="utf-8")
+
+        loaded = ProfileManager().load("V5Fkey")
+        assert loaded is not None
+        assert loaded.buttons[0].hotkey_mode == "fkey"
+        assert loaded.buttons[1].hotkey_mode == "fkey"
+
+    def test_fkey_roundtrip(self, qapp, tmp_home):
+        """hotkey_mode='fkey' przeżywa zapis + odczyt."""
+        mgr = ProfileManager()
+        mgr.ensure_default()
+        p = mgr.active
+        assert p is not None
+        p.buttons[0].hotkey_mode = "fkey"
+        p.buttons[0].hotkey = "Ctrl+Alt+F20"
+        mgr.save(p)
+
+        loaded = ProfileManager().load("Default")
+        assert loaded is not None
+        assert loaded.buttons[0].hotkey_mode == "fkey"
+        assert loaded.buttons[0].hotkey == "Ctrl+Alt+F20"
+
+    def test_invalid_hotkey_mode_falls_back(self, qapp):
+        """Śmieciowa wartość hotkey_mode → walidacja/inferencja."""
+        from simple_deck.core.profile import _validate_hotkey_mode
+        assert _validate_hotkey_mode("bogus", "F13") == "fkey"
+        assert _validate_hotkey_mode("bogus", "Ctrl+D") == "combo"
+        assert _validate_hotkey_mode("FKEY", "") == "fkey"
+        assert _validate_hotkey_mode("", "") == "combo"
+        assert _validate_hotkey_mode("combo", "F13") == "combo"
+
 
 class TestProfileCRUDFlow:
     """Pełny CRUD: create → rename → duplicate → delete."""

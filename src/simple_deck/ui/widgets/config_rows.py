@@ -35,8 +35,14 @@ class _ConfigRow(QFrame):
         outer.setContentsMargins(20, 16, 20, 16)
         outer.setSpacing(16)
 
-        # Lewa kolumna: badge/ikona + tytuł (subklasy mogą dodawać widgety)
-        self._left_col = QVBoxLayout()
+        # Lewa kolumna: badge/ikona + tytuł (subklasy mogą dodawać widgety).
+        # V1.0.5: kontener o STAŁEJ szerokości — badge + nazwa zajmują dokładnie
+        # tyle samo miejsca na kartach Przyciski i Potencjometry (spójny podział
+        # karty niezależnie od długości nazwy). Tytuł zawija się zamiast rozpychać.
+        self._left_widget = QWidget()
+        self._left_widget.setFixedWidth(180)
+        self._left_col = QVBoxLayout(self._left_widget)
+        self._left_col.setContentsMargins(0, 0, 0, 0)
         self._left_col.setSpacing(4)
 
         if badge is not None:
@@ -54,10 +60,14 @@ class _ConfigRow(QFrame):
 
         title_lbl = QLabel(title, objectName="sectionTitle")
         title_lbl.setStyleSheet("font-size: 14px;")
+        title_lbl.setWordWrap(True)
+        title_lbl.setAlignment(Qt.AlignCenter)
+        # Ignored — kolumna ma sztywną szerokość, tytuł nie może jej rozpychać.
+        title_lbl.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
         self._left_col.addWidget(glyph_lbl, alignment=Qt.AlignCenter)
         self._left_col.addWidget(title_lbl)
         self._title_lbl = title_lbl
-        outer.addLayout(self._left_col)
+        outer.addWidget(self._left_widget)
 
         # Separator
         sep = QFrame()
@@ -450,11 +460,51 @@ class ButtonRow(_ConfigRow):
         self._action_combo.currentIndexChanged.connect(lambda *_: self._on_action_changed())
         self._add_field("Akcja", self._action_combo)
 
-        # Pole hotkeya (widoczne tylko dla HOTKEY)
+        # Pole hotkeya (widoczne tylko dla HOTKEY w trybie "combo")
         self._hotkey_field = HotkeyField()
         self._hotkey_field.set_value(config.hotkey)
         self._hotkey_field.hotkey_changed.connect(lambda *_: self._on_changed())
         self._hotkey_row = self._add_field_wrapped("Skrót", self._hotkey_field)
+
+        # V1.0.5: Typ skrótu — zwykły klawiaturowy (dialog przechwytuje) albo
+        # klawisz funkcyjny spoza normalnego zakresu klawiatury (F13–F24)
+        # z opcjonalnymi modyfikatorami. Widoczne tylko dla HOTKEY.
+        self._mode_combo = QComboBox()
+        self._mode_combo.addItem("Skrót klawiaturowy", "combo")
+        self._mode_combo.addItem("Klawisz funkcyjny (F13–F24)", "fkey")
+        self._mode_combo.setCurrentIndex(1 if config.hotkey_mode == "fkey" else 0)
+        self._mode_row = self._add_field_wrapped("Typ skrótu", self._mode_combo)
+
+        self._fkey_combo = QComboBox()
+        for n in range(13, 25):
+            self._fkey_combo.addItem(f"F{n}", f"F{n}")
+        self._fkey_ctrl = QCheckBox("Ctrl")
+        self._fkey_shift = QCheckBox("Shift")
+        self._fkey_alt = QCheckBox("Alt")
+        for cb in (self._fkey_ctrl, self._fkey_shift, self._fkey_alt):
+            cb.setStyleSheet("background: transparent;")
+        fkey_holder = QWidget()
+        fkey_lay = QHBoxLayout(fkey_holder)
+        fkey_lay.setContentsMargins(0, 0, 0, 0)
+        fkey_lay.setSpacing(12)
+        fkey_lay.addWidget(self._fkey_combo)
+        fkey_lay.addWidget(self._fkey_ctrl)
+        fkey_lay.addWidget(self._fkey_shift)
+        fkey_lay.addWidget(self._fkey_alt)
+        fkey_lay.addStretch(1)
+        self._fkey_row = self._add_field_wrapped("Klawisz", fkey_holder)
+
+        # Wczytaj zapisany klawisz funkcyjny PRZED podłączeniem sygnałów
+        # (ustawienie programowe — bez fałszywych emitów).
+        if config.hotkey_mode == "fkey":
+            self._load_fkey_combo(config.hotkey)
+
+        self._mode_combo.currentIndexChanged.connect(
+            lambda *_: self._update_field_visibility())
+        self._mode_combo.currentIndexChanged.connect(lambda *_: self._on_changed())
+        self._fkey_combo.currentIndexChanged.connect(lambda *_: self._on_changed())
+        for cb in (self._fkey_ctrl, self._fkey_shift, self._fkey_alt):
+            cb.toggled.connect(lambda *_: self._on_changed())
 
         # Pole komendy (widoczne tylko dla RUN_COMMAND)
         self._command_field = QLineEdit()
@@ -530,13 +580,47 @@ class ButtonRow(_ConfigRow):
         self._fields_layout.addWidget(wrapper)
         return wrapper
 
+    # --- V1.0.5: klawisze funkcyjne F13–F24 ---
+
+    def _load_fkey_combo(self, hotkey: str) -> None:
+        """Rozłóż zapisany combo (np. "Ctrl+F13") na widgety F-key."""
+        for tok in (hotkey or "").split("+"):
+            t = tok.strip()
+            if not t:
+                continue
+            low = t.lower()
+            if low.startswith("f") and low[1:].isdigit() and 13 <= int(low[1:]) <= 24:
+                self._fkey_combo.setCurrentText(f"F{int(low[1:])}")
+            elif low in ("ctrl", "control"):
+                self._fkey_ctrl.setChecked(True)
+            elif low == "shift":
+                self._fkey_shift.setChecked(True)
+            elif low == "alt":
+                self._fkey_alt.setChecked(True)
+
+    def _build_fkey_string(self) -> str:
+        """Zbuduj combo w canonicalnej kolejności: Ctrl, Shift, Alt, F-key."""
+        parts = []
+        if self._fkey_ctrl.isChecked():
+            parts.append("Ctrl")
+        if self._fkey_shift.isChecked():
+            parts.append("Shift")
+        if self._fkey_alt.isChecked():
+            parts.append("Alt")
+        parts.append(self._fkey_combo.currentData() or "F13")
+        return "+".join(parts)
+
     def _on_action_changed(self) -> None:
         self._update_field_visibility()
         self._on_changed()
 
     def _update_field_visibility(self) -> None:
         action = self._action_combo.currentData()
-        self._hotkey_row.setVisible(action == ButtonAction.HOTKEY)
+        is_hotkey = action == ButtonAction.HOTKEY
+        self._mode_row.setVisible(is_hotkey)
+        is_fkey = is_hotkey and self._mode_combo.currentData() == "fkey"
+        self._hotkey_row.setVisible(is_hotkey and not is_fkey)
+        self._fkey_row.setVisible(is_fkey)
         self._command_row.setVisible(action == ButtonAction.RUN_COMMAND)
         self._mute_row.setVisible(action == ButtonAction.TOGGLE_MUTE)
         self._paste_row.setVisible(action == ButtonAction.PASTE_TEXT)
@@ -551,13 +635,18 @@ class ButtonRow(_ConfigRow):
             target = self._mute_target.text()
         elif action == ButtonAction.PASTE_TEXT:
             target = self._paste_field.toPlainText()
+        # V1.0.5: wartość hotkeya z właściwego pola zależnie od trybu skrótu.
+        mode = "fkey" if self._mode_combo.currentData() == "fkey" else "combo"
+        hotkey = (self._build_fkey_string() if mode == "fkey"
+                  else self._hotkey_field.value())
         cfg = ButtonConfig(
             idx=self._config.idx,
             action=action,
-            hotkey=self._hotkey_field.value(),
+            hotkey=hotkey,
             target=target,
             on_press=self._on_press.isChecked(),
             paste_enter=self._paste_enter.isChecked() if action == ButtonAction.PASTE_TEXT else False,
+            hotkey_mode=mode,  # V6: nie gub tryb skrótu (karty przebudowują config)
             label=self._config.label,  # V1.0.3: nie gub nazwy z Overview
         )
         self._config = cfg

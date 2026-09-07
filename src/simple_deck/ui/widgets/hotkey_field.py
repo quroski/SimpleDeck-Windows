@@ -84,8 +84,8 @@ def _qt_key_to_name(key: int) -> str:
     # Cyfry 0-9
     if Qt.Key_0 <= key <= Qt.Key_9:
         return chr(ord("0") + (key - Qt.Key_0))
-    # Klawisze funkcyjne F1-F12
-    if Qt.Key_F1 <= key <= Qt.Key_F12:
+    # Klawisze funkcyjne F1-F24 (V1.0.5: F13–F24 poza normalnym zakresem)
+    if Qt.Key_F1 <= key <= Qt.Key_F24:
         return f"F{key - Qt.Key_F1 + 1}"
     # Fallback - nazwa Qt lub "Key{N}"
     try:
@@ -144,10 +144,10 @@ def _normalize_combo_token(token: str) -> str:
     # Pojedynczy znak — upper case (litery, cyfry, interpunkcja)
     if len(t) == 1:
         return t.upper()
-    # Funkcyjne (F1..F12) — zachowaj „F" upper + numer
+    # Funkcyjne (F1..F24) — zachowaj „F" upper + numer
     if low[0] == "f" and low[1:].isdigit():
         n = int(low[1:])
-        if 1 <= n <= 12:
+        if 1 <= n <= 24:
             return f"F{n}"
     # Multimedia i specjalne — CamelCase z mapy, fallback Capitalize
     media_map = {

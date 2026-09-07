@@ -26,9 +26,9 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Wersja do zbudowania (bez prefixu v, np. 1.0.4a)'
+        description: 'Wersja do zbudowania (bez prefixu v, np. 1.0.5a)'
         required: true
-        default: '1.0.4a'
+        default: '1.0.5a'
       prerelease:
         description: 'Oznacz release jako pre-release (beta)'
         type: boolean

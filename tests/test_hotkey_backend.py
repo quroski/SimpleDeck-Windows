@@ -8,6 +8,7 @@ Scenariusze:
 """
 from __future__ import annotations
 
+import pytest
 from unittest.mock import patch
 
 from simple_deck.platform.hotkey import (
@@ -68,6 +69,32 @@ class TestWindowsHotkeyBackend:
 
     def test_backend_name(self):
         assert WindowsHotkeyBackend().backend_name() == "WindowsHotkeyBackend"
+
+
+class TestExtendedFunctionKeys:
+    """V1.0.5: klawisze funkcyjne F13–F24 (spoza normalnego zakresu)."""
+
+    @pytest.mark.parametrize("name,vk", [
+        ("f13", 0x7C), ("f14", 0x7D), ("f15", 0x7E), ("f16", 0x7F),
+        ("f17", 0x80), ("f18", 0x81), ("f19", 0x82), ("f20", 0x83),
+        ("f21", 0x84), ("f22", 0x85), ("f23", 0x86), ("f24", 0x87),
+    ])
+    def test_vk_for_extended_fkeys(self, name, vk):
+        backend = WindowsHotkeyBackend()
+        assert backend._vk_for(name) == vk
+
+    @pytest.mark.parametrize("combo", ["F13", "Ctrl+F13", "Ctrl+Shift+F24",
+                                       "Alt+F18"])
+    def test_simulate_extended_fkey(self, combo):
+        backend = WindowsHotkeyBackend()
+        with patch.object(backend, "_send") as send:
+            assert backend.simulate_combo(combo) is True
+            # N klawiszy → down ×N + up ×N
+            assert send.call_count == 2 * len(combo.split("+"))
+
+    def test_simulate_fkey_unknown_modifier_still_false(self):
+        backend = WindowsHotkeyBackend()
+        assert backend.simulate_combo("Ctrl+Bogus+F13") is False
 
 
 class TestFactory:
