@@ -25,6 +25,7 @@ env/
 # Build logs
 build_log.txt
 *.log
+installer/windows/version_info.txt
 
 # OS
 .DS_Store
