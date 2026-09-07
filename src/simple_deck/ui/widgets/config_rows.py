@@ -40,7 +40,7 @@ class _ConfigRow(QFrame):
         # tyle samo miejsca na kartach Przyciski i Potencjometry (spójny podział
         # karty niezależnie od długości nazwy). Tytuł zawija się zamiast rozpychać.
         self._left_widget = QWidget()
-        self._left_widget.setFixedWidth(180)
+        self._left_widget.setFixedWidth(120)
         self._left_col = QVBoxLayout(self._left_widget)
         self._left_col.setContentsMargins(0, 0, 0, 0)
         self._left_col.setSpacing(4)

@@ -224,8 +224,8 @@ class TestConfigRowLeftColumn:
 
     def test_left_column_fixed_width(self, qapp):
         row = ButtonRow(ButtonConfig(idx=0))
-        assert row._left_widget.minimumWidth() == 180
-        assert row._left_widget.maximumWidth() == 180
+        assert row._left_widget.minimumWidth() == 120
+        assert row._left_widget.maximumWidth() == 120
 
     def test_button_and_pot_rows_equal_column_width(self, qapp):
         from simple_deck.core.profile import PotConfig

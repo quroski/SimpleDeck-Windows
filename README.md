@@ -1,12 +1,88 @@
-# Simple Deck — Aplikacja desktopowa
+# Simple Deck — Aplikacja desktopowa dla Windows 10/11
 
 Aplikacja kontrolna dla urządzenia **GREJEM Stream Deck**. Python 3.10+,
-**PySide6** (Qt 6) z interfejsem w stylu **Glassmorphism / Glossy**. Auto-reconnect
-USB HID, wykrywanie aktywnej aplikacji, kontrola głośności (WASAPI), symulacja skrótów klawiszowych.
+**PySide6** (Qt 6) z GUI. Auto-detect USB HID, auto-reconnect, wykrywanie aktywnej aplikacji, kontrola głośności (WASAPI), symulacja skrótów klawiszowych.
+
+Repozytorium-matka: [KacperL-i2c/simpleDeck_V3](https://github.com/KacperL-i2c/simpleDeck_V3)
+
 
 ---
 
-## 1. Struktura
+
+---
+---
+
+## 1. Funkcjonalności
+
+### Transport (USB HID)
+- **Custom HID** (VID 0x1209, PID 0xDE10), EP1 IN/OUT, 64-bajtowe raporty
+- **Auto-reconnect**: przy rozłączeniu kabla lub utracie heartbeatu (>4.5 s) cyklicznie
+  próbuje połączyć ponownie w tle - UI się **NIE zawiesza**
+- Heartbeat watchdog: 3 × 1.5 s = 4.5 s timeout
+- Reader w osobnym wątku daemon → Qt sygnały automatycznie kolejkowane do głównego wątku
+
+### Profile (JSON w `~/.config/simple-deck/profiles/`)
+- 5 potencjometrów → głośność systemowa / głośność aplikacji / gra - auto wykrywanie / wyłączony
+- 4 przyciski → skrót klawiszowy / klawisz funkcyjny F13-F24 / toggle-mute / uruchom komendę / wklej tekst / brak
+- 3 LED VU bar → wskaźnik głośności (auto-focus na pot, timeout 3 s, fade 300 ms)
+- Auto-switch wg aktywnej aplikacji (np. `discord` → profil Discord)
+
+
+### Audio
+- **Windows**: WASAPI przez `pycaw` (per-process volume)
+- Fallback `NullAudioBackend` jeśli backend niedostępny
+
+### Hotkeys
+- **Windows**: `SendInput` przez ctypes (bez zewnętrznych zależności)
+- Fallback `NullHotkeyBackend`
+
+### Window detection
+- **Windows**: `GetForegroundWindow` + `QueryFullProcessImageNameW` (ctypes)
+
+### UI / Glossy
+- Ciemnoszafirnowe tło z subtelnym gradientem
+- Karty frosted glass (rgba 78% + 1px biała obwódka + radius 18)
+- Gradient świetlny na górze każdej karty (efekt glossy)
+- Neonowe akcenty: cyan `#2DD4FF` (primary), magenta `#FF2EC4`, purple `#9B5CFF`
+- Drop shadows przez `QGraphicsDropShadowEffect`
+- Animacja kropki statusu (4 kolory wg stanu połączenia)
+
+---
+## 2. Instalacja
+
+Pobierz najnowszą wersję [instalatora .exe](https://github.com/quroski/SimpleDeck-Windows/releases) i uruchom na swoim PC
+
+
+Istnieje ryzyko pop-up z Windows Defender. Jest to spowodowane brakiem cyfrowego podpisu oprogramowania. Autorzy nie ponoszą odpowiedzialności za jakiekolwiek problemy wynikające z funkcjonowania/instalacji oprogramowania.
+
+### Zawartość instalacji
+
+#### Pliki
+| Co | Gdzie |
+|---|---|
+| Pakiet aplikacji (PyInstaller one-folder: `Simple-Deck.exe`, `Qt6*.dll`, `python3*.dll`, `hidapi.dll`) | `C:\Program Files\Simple Deck\` |
+| Pluginy Qt (platforms, styles, imageformats) | `C:\Program Files\Simple Deck\PySide6\` |
+| Zasoby: motyw QSS, ikony SVG, fonty | `C:\Program Files\Simple Deck\assets\` |
+| Ikony aplikacji | `C:\Program Files\Simple Deck\icons\` |
+
+#### Skróty
+- Menu Start: `GREJEM INDUSTRIES\Simple Deck` (+ wpis Deinstaluj) — zawsze
+- Ikona na pulpicie — opcjonalna (odznaczona domyślnie)
+- Autostart przy starcie systemu — opcjonalny (odznaczony domyślnie)
+
+#### Rejestr
+- `HKLM\SOFTWARE\GREJEM INDUSTRIES\Simple Deck` (`InstallPath`, `Version`) + wpis w Programach i funkcjach. Instalator wymaga uprawnień administratora.
+
+#### Czego instalator NIE instaluje
+- Sterowników (urządzenie to USB HID — Windows używa wbudowanego `hid.dll`)
+- Usług, zaplanowanych zadań, rozszerzeń powłoki ani dodatkowego oprogramowania
+
+#### Dane użytkownika (tworzone przy pierwszym uruchomieniu)
+- Profile i ustawienia: `~\.config\simple-deck\` — pozostają po deinstalacji.
+
+---
+
+## 3. Struktura
 
 ```
 simple-deck-desktop/
@@ -59,101 +135,9 @@ simple-deck-desktop/
 └── .github/workflows/
     └── release.yml          ← CI/CD dla GitHub Releases
 ```
-
 ---
 
-## 2. Instalacja i uruchomienie (NAJSZYBCIEJ)
-
-### 2.1. Windows
-
-```powershell
-cd "C:\...\simple-deck-desktop"
-.\run.bat            # stworzy .venv, zainstaluje deps, uruchomi aplikację
-.\run.bat --demo
-```
-
-### 2.2. Instalacja na stałe (do menu aplikacji)
-
-Jeśli chcesz mieć Simple Deck w menu aplikacji na stałe, użyj instalatora:
-
-```powershell
-cd "installer\windows"
-.\build.ps1          # zbuduje .exe i .msi
-```
-
-Następnie uruchom `output\Simple-Deck-Setup-X.Y.Z.exe`.
-
----
-
-## 3. Ręczna konfiguracja (dla zaawansowanych)
-
-Skrypt `run.bat` automatyzuje poniższe kroki. Jeśli wolisz ręcznie:
-
-```powershell
-# Windows
-python -m venv .venv
-.\.venv\Scripts\activate
-pip install -e ".[windows]"  # Windows: pycaw + pywin32
-
-python -m simple_deck        # uruchom
-```
-
-Wszystkie zależności są deklarowane w [`pyproject.toml`](pyproject.toml) (PEP 621).
-
----
-
-## 4. Funkcjonalności
-
-### Transport (USB HID)
-- **Custom HID** (VID 0x1209, PID 0xDE10), EP1 IN/OUT, 64-bajtowe raporty
-- **Auto-reconnect**: przy rozłączeniu kabla lub utracie heartbeatu (>4.5 s) cyklicznie
-  próbuje połączyć ponownie w tle - UI się **NIE zawiesza**
-- Heartbeat watchdog: 3 × 1.5 s = 4.5 s timeout
-- Reader w osobnym wątku daemon → Qt sygnały automatycznie kolejkowane do głównego wątku
-
-### Profile (JSON w `~/.config/simple-deck/profiles/`)
-- 5 potencjometrów → głośność systemowa / głośność aplikacji / wyłączony
-- 4 przyciski → skrót klawiszowy / toggle-mute / uruchom komendę
-- 8 LED VU bar → wskaźnik głośności (auto-focus na pot, timeout 3 s, fade 300 ms)
-- Auto-switch wg aktywnej aplikacji (np. `discord` → profil Discord)
-- **V1.0.3**: własne nazwy kontrolek — edycja inline (✎) w Overview, zapis w
-  profilu; nazwy pokazują się też na kartach POTENCJOMETRY / PRZYCISKI
-- **V1.0.3**: żywy wskaźnik aktywności potencjometrów na stronie POTENCJOMETRY
-  (kropka + % podświetla się przy ruchu fizycznej kontrolki, gaśnie po 1 s)
-- **V1.0.4**: karty przycisków mają numerowany badge (spójnie z kartami
-  potencjometrów) zamiast glifu „◻"; usunięte martwe backendy Linux
-  (xdotool/wtype/ydotool, pulsectl, python-xlib, xclip, autostart .desktop) —
-  aplikacja jest Windows-only; poprawiony toast błędu skrótu i schowek
-  akcji „Wklej tekst" (czysty WinAPI).
-- **V1.0.5**: kolumna badge + nazwa na stronach PRZYCISKI i POTENCJOMETRY ma
-  stałą szerokość — karty dzielą się identycznie na obu stronach; nowa opcja
-  „Klawisz funkcyjny (F13–F24)" dla przycisków (Typ skrótu) — klawisze poza
-  normalnym zakresem klawiatury z opcjonalnymi Ctrl/Shift/Alt (profil schema v6,
-  stare profile migrują automatycznie; F13–F24 działa też przy ręcznym wpisie
-  skrótu).
-
-### Audio
-- **Windows**: WASAPI przez `pycaw` (per-process volume)
-- Fallback `NullAudioBackend` jeśli backend niedostępny
-
-### Hotkeys
-- **Windows**: `SendInput` przez ctypes (bez zewnętrznych zależności)
-- Fallback `NullHotkeyBackend`
-
-### Window detection
-- **Windows**: `GetForegroundWindow` + `QueryFullProcessImageNameW` (ctypes)
-
-### UI / Glossy
-- Ciemnoszafirnowe tło z subtelnym gradientem
-- Karty frosted glass (rgba 78% + 1px biała obwódka + radius 18)
-- Gradient świetlny na górze każdej karty (efekt glossy)
-- Neonowe akcenty: cyan `#2DD4FF` (primary), magenta `#FF2EC4`, purple `#9B5CFF`
-- Drop shadows przez `QGraphicsDropShadowEffect`
-- Animacja kropki statusu (4 kolory wg stanu połączenia)
-
----
-
-## 5. Testy
+## 4. Testy
 
 ```bash
 pytest tests/
@@ -165,8 +149,7 @@ Powinno przejść wszystkie testy:
 
 ---
 
-## 6. Zobacz też
+## 5. Zobacz też
 
-- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — architektura aplikacji
-- [`docs/PROTOCOL.md`](docs/PROTOCOL.md) — protokół komunikacji HID
 - Repozytorium firmware: [KacperL-i2c/simpleDeck_V3](https://github.com/KacperL-i2c/simpleDeck_V3)
+- Zgłoszenie błędów /.bugów / request of features: [issues](https://github.com/quroski/SimpleDeck-Windows/issues)
