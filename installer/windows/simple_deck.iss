@@ -1,4 +1,4 @@
-; ============================================================================
+﻿; ============================================================================
 ;  Simple Deck - Inno Setup script
 ;  Buduje instalator .exe dla Windows (10/11 x64)
 ;  ----------------------------------------------------------------------------
@@ -74,10 +74,10 @@ Name: "polish";  MessagesFile: "compiler:Languages\Polish.isl"
 
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
-; Autostart NIE jest już tworzony przez instalator: wpis Run-key (SIMPLEDECK)
-+ skrót w folderze Autostart = DWA wpisy "Simple Deck" w Ustawienia →
-Aplikacje → Uruchamianie. Jedyne źródło autostartu to checkbox w aplikacji
-(Ustawienia → System), zarządzający kluczem HKCU\...\Run\SIMPLEDECK.
+; Autostart NIE jest tworzony przez instalator: wpis Run-key (SIMPLEDECK)
+; + skrot w folderze Autostart = DWA wpisy "Simple Deck" w Ustawienia ->
+; Aplikacje -> Uruchamianie. Jedyne zrodlo autostartu to checkbox w aplikacji
+; (Ustawienia -> System), zarzadzajacy kluczem HKCU\...\Run\SIMPLEDECK.
 ; QuickLaunch usunięty (Windows 7+ nie ma paska Szybkiego uruchamiania)
 
 ; === Pliki aplikacji - skopiuj wszystko co PyInstaller wypluł ===
