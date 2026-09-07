@@ -15,7 +15,7 @@
   #define MyAppVersion      "1.1.1"
 #endif
 #define MyAppPublisher      "GREJEM INDUSTRIES"
-#define MyAppURL            "https://github.com/grejem-industries/grejem-os"
+#define MyAppURL            "https://github.com/quroski/SimpleDeck-Windows"
 #define MyAppExeName        "Simple-Deck.exe"
 #define MyAppDescription    "Simple Deck - Stream Deck Controller"
 

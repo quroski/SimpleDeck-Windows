@@ -3,11 +3,19 @@ Simple Deck został zainstalowany pomyślnie!
 Następne kroki:
 
   1. Podłącz urządzenie GREJEM Stream Deck przez USB-C
-  2. Uruchom aplikację Simple Deck ze skrótu na pulpicie lub z menu Start
+  2. Uruchom aplikację Simple Deck z menu Start (lub zaznacz ikonę pulpitu
+     przy instalacji i uruchom ze skrótu)
   3. Status "● Połączony" w prawym górnym rogu oznacza połączenie z MCU
-  4. Skonfiguruj profile w zakładce "Potencjometry" i "Przyciski"
+  4. Skonfiguruj potencjometry i przyciski na kartach "Potencjometry"
+     i "Przyciski" (nazwy, kierunek, wyciszanie przy 0%, skróty)
 
-Wsparcie i aktualizacje:
-  https://github.com/grejem-industries/grejem-os
+Wskazówki:
+  - Autostart z systemem włączysz w Ustawienia -> System
+  - Kierunek potencjometrów zmienisz w Ustawienia -> Sterowanie (globalnie)
+    lub w karcie potencjometru pod "Zaawansowane" (indywidualnie)
+
+Wsparcie, aktualizacje i zgłaszanie błędów:
+  https://github.com/quroski/SimpleDeck-Windows
+  https://github.com/quroski/SimpleDeck-Windows/issues
 
 Dziękujemy za wybór GREJEM INDUSTRIES!

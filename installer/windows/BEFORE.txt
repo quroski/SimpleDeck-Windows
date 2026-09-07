@@ -4,16 +4,25 @@ Simple Deck to aplikacja kontrolna dla urządzenia GREJEM Stream Deck
 (opartego na mikrokontrolerze STM32F103C6T6, łączącym się z PC przez USB-C).
 
 Funkcje:
+  - Kontrola głośności systemowej, per-aplikacji i w grach (WASAPI)
+  - Wyciszanie przy pozycji 0% potencjometru (globalnie lub dla każdego osobno)
+  - Odwracanie kierunku potencjometrów (globalnie lub każdy osobno)
+  - Skróty klawiszowe, w tym klawisze funkcyjne F13-F24
+  - Akcje przycisków: toggle-mute, wklejanie tekstu, uruchamianie komend
+  - Własne nazwy potencjometrów i przycisków oraz dowolna kolejność kart
+  - Profile auto-przełączane wg aktywnej aplikacji (np. Discord -> Gaming)
   - Auto-reconnect USB HID - aplikacja nigdy się nie zawiesza
-  - Adaptacyjny filtr potencjometrów (EMA + deadband)
-  - Kontrola głośności systemowej i per-proces (WASAPI)
-  - Symulacja skrótów klawiszowych (SendInput)
-  - Profile auto-przełączane wg aktywnej aplikacji
+  - Linijka LED VU reagująca na głośność
+  - Tryb zminimalizowany do zasobnika systemowego (tray)
+  - Autostart z systemem - jeden przełącznik w ustawieniach
   - Interfejs w stylu Glassmorphism
 
-Wymagania sprzętowe:
+Wymagania:
   - Windows 10 x64 lub nowszy
   - Połączenie USB-C z urządzeniem GREJEM Stream Deck
-  - 200 MB wolnego miejsca na dysku
+  - ok. 650 MB wolnego miejsca na dysku
+
+Zgłaszanie błędów i pomysłów:
+  https://github.com/quroski/SimpleDeck-Windows/issues
 
 Grejem Industries życzy udanej instalacji!
