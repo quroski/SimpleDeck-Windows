@@ -38,6 +38,9 @@ class EventBus(QObject):
     # V4: Kolejność wyświetlania potencjometrów zmieniła się na PotsPage.
     # DeckMap nasłuchuje by przestawić komórki w gridzie.
     pot_order_changed = Signal()
+    # V7: Globalne odwrócenie kierunku potów (invert_all_pots) zmieniło się
+    # w Ustawieniach — DeckMap odświeża paski Overview bez restartu aplikacji.
+    pot_invert_changed = Signal()
 
     def route(self, frame: Frame) -> None:
         """Rozpakuj ramkę i emituj odpowiedni sygnał."""

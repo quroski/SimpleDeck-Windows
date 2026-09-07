@@ -43,6 +43,17 @@ class AudioBackend(ABC):
     def get_mute(self, target: Optional[str] = None) -> bool:
         """Czy wyciszone."""
 
+    def set_mute(self, muted: bool, target: Optional[str] = None) -> None:
+        """Ustaw stan wyciszenia (True = mute, False = unmute).
+
+        Domyślnie zaimplementowane przez get_mute + toggle_mute (dla
+        backendów bez bezpośredniego SetMute). Backendy WASAPI nadpisują
+        bezpośrednim SetMute — unika przełączenia stanu ustawionego ręcznie
+        przez użytkownika między get a toggle.
+        """
+        if self.get_mute(target) != bool(muted):
+            self.toggle_mute(target)
+
     def list_output_devices(self) -> list[tuple[str, str]]:
         """Lista urządzeń wyjściowych jako (nazwa_wewnętrzna, opis).
 
@@ -82,6 +93,7 @@ class NullAudioBackend(AudioBackend):
     def set_volume(self, value, target=None) -> None: pass
     def toggle_mute(self, target=None) -> None: pass
     def get_mute(self, target=None) -> bool: return False
+    def set_mute(self, muted: bool, target=None) -> None: pass
 
 
 # ============================================================
@@ -222,6 +234,24 @@ class WindowsAudioBackend(AudioBackend):
             master.SetMute(not cur, None)
         except Exception:
             log.exception("toggle_mute failed")
+
+    def set_mute(self, muted: bool, target: Optional[str] = None) -> None:
+        """Ustaw stan wyciszenia bezpośrednio (SetMute(bool)).
+
+        Nadpisuje ABC default (get+toggle) — bezpośrednie SetMute nie zależy
+        od bieżącego stanu, więc nie ma race gdy użytkownik ręcznie zdmucha
+        dźwięk między odczytem a przełączeniem.
+        """
+        try:
+            if target:
+                s = self._get_session(target)
+                if s is not None:
+                    s.SimpleAudioVolume.SetMute(bool(muted), None)
+                return
+            master = self._get_master()
+            master.SetMute(bool(muted), None)
+        except Exception:
+            log.exception("set_mute failed")
 
     def get_mute(self, target: Optional[str] = None) -> bool:
         try:

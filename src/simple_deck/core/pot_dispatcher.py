@@ -70,8 +70,8 @@ class PotDispatcher(QObject):
         self._window_backend = window_backend
         self._profile: Optional[Profile] = None
 
-        # Koalescencja: idx -> ostatnia wyliczona głośność (jeszcze niewysłana)
-        self._pending: dict[int, float] = {}
+        # Koalescencja: idx -> (głośność, czy pozycja zerowa) — jeszcze niewysłane
+        self._pending: dict[int, tuple[float, bool]] = {}
         self._last_flush = 0.0
         # Pojedynczy timer koalescujący - flush'uje pending po MIN_INTERVAL_S
         self._coalesce = QTimer(self)
@@ -120,6 +120,10 @@ class PotDispatcher(QObject):
             target = cfg.target if cfg.action == PotAction.APP_VOLUME else None
             try:
                 self._audio.set_volume(vol, target=target)
+                # V7: przywróć stan mute zgodny z zapamiętaną pozycją pota
+                # (np. user zostawił pot na 0% → cel pozostaje wyciszony).
+                if self._mute_enabled(cfg) and self._is_zero_position(cfg, cached[idx]):
+                    self._audio.set_mute(True, target=target)
             except Exception:
                 log.debug("sync volume failed for pot %d", idx)
 
@@ -164,7 +168,7 @@ class PotDispatcher(QObject):
         if self._audio is None or not is_volume:
             return
 
-        self._pending[idx] = level
+        self._pending[idx] = (level, self._is_zero_position(cfg, adc))
         now = time.monotonic()
         if now - self._last_flush >= MIN_INTERVAL_S:
             # Możemy wysłać natychmiast
@@ -199,6 +203,29 @@ class PotDispatcher(QObject):
             vol *= sens
         return max(0.0, min(1.0, vol))
 
+    def _mute_enabled(self, cfg) -> bool:
+        """V7: czy mute-przy-0% jest aktywny dla tego pota.
+
+        Globalny ``mute_at_zero_all_pots`` LUB per-pot ``mute_at_zero`` —
+        wystarczy jedno (user: "only one must allow").
+        """
+        return (bool(getattr(self._settings, "mute_at_zero_all_pots", False))
+                or bool(getattr(cfg, "mute_at_zero", False)))
+
+    def _is_zero_position(self, cfg, adc: int) -> bool:
+        """V7: czy pot jest w pozycji zerowej — oceniane PO odwróceniu kierunku.
+
+        To ta sama normalizacja co w ``_map_volume``/``_raw_level`` (XOR
+        global ⊕ per-pot invert), więc odwrócony potencjometr ma swoje
+        efektywne zero na ADC 4095, a nieodwrócony na ADC 0. Pozycja zerowa
+        to pozycja gałki, NIE wyliczona głośność (min_volume > 0 nadal mutuje).
+        """
+        norm = max(0, min(int(adc), 4095)) / ADC_MAX
+        global_invert = bool(getattr(self._settings, "invert_all_pots", False))
+        if bool(getattr(cfg, "invert", False)) ^ global_invert:
+            norm = 1.0 - norm
+        return norm <= 0.0
+
     def _get_foreground_proc(self) -> str:
         """Zwraca nazwę procesu aktywnej aplikacji (cached, TTL 1 s)."""
         now = time.monotonic()
@@ -230,7 +257,7 @@ class PotDispatcher(QObject):
             fg_proc = self._get_foreground_proc()
             if self._settings is not None:
                 game_apps = [a.lower() for a in getattr(self._settings, "game_apps", [])]
-        for idx, vol in list(self._pending.items()):
+        for idx, (vol, at_zero) in list(self._pending.items()):
             try:
                 target = None
                 if idx < len(self._profile.pots):
@@ -243,6 +270,15 @@ class PotDispatcher(QObject):
                             target = fg_proc
                         else:
                             continue  # brak gry → nic nie rób
+                    # V7: mute przy pozycji 0% — TYLKO gdy funkcja włączona
+                    # dla tego pota (nigdy nie ruszamy ręcznego mute'u usera
+                    # na potach bez tej opcji). Pozycja 0 → set_mute(True),
+                    # wartość głośności nietknięta; poza zerem → unmute +
+                    # normalna głośność.
+                    if self._mute_enabled(cfg):
+                        self._audio.set_mute(at_zero, target=target)
+                        if at_zero:
+                            continue  # mute=True; nie ruszamy wartości głośności
                 self._audio.set_volume(vol, target=target)
             except Exception:
                 log.exception("set_volume failed for pot %d", idx)

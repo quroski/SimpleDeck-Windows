@@ -13,6 +13,19 @@ def _profile_with_pot(**pot_kw) -> Profile:
     return p
 
 
+def _settings(**kw) -> MagicMock:
+    """MagicMock Settings z jawnie wyzerowanymi flagami dispatcher-a.
+
+    Auto-atrybuty MagicMock są truthy — bez tego mute_at_zero_all_pots /
+    invert_all_pots włączałyby się przypadkiem w testach bez settings.
+    """
+    m = MagicMock()
+    m.invert_all_pots = kw.get("invert_all_pots", False)
+    m.mute_at_zero_all_pots = kw.get("mute_at_zero_all_pots", False)
+    m.last_pot_values = [-1] * 5
+    return m
+
+
 class TestCurve:
     def test_linear(self):
         assert _apply_curve(0.5, "linear") == 0.5
@@ -165,8 +178,7 @@ class TestGlobalInvert:
 
     def test_global_invert_alone(self, qapp, bus):
         audio = MagicMock()
-        settings = MagicMock()
-        settings.invert_all_pots = True
+        settings = _settings(invert_all_pots=True)
         disp = PotDispatcher(bus, audio, settings=settings)
         disp.set_profile(_profile_with_pot(action=PotAction.SYSTEM_VOLUME,
                                             invert=False))
@@ -231,3 +243,159 @@ class TestPotValueCache:
         bus.pot_event.emit(0, 4095)   # idx=0 = NONE
         assert settings.last_pot_values[0] == 4095
         audio.set_volume.assert_not_called()
+
+
+class TestMuteAtZero:
+    """V7: Wyciszanie przy pozycji 0% (po odwróceniu kierunku).
+
+    Semantyka "mute only": na pozycji zerowej → set_mute(True), wartość
+    głośności nietknięta. Poza zerem → set_mute(False) + set_volume.
+    Global toggle LUB per-pot checkbox włączają funkcję (OR).
+    """
+
+    def test_zero_position_mutes_system_volume(self, qapp, bus):
+        audio = MagicMock()
+        disp = PotDispatcher(bus, audio, settings=_settings())
+        disp.set_profile(_profile_with_pot(action=PotAction.SYSTEM_VOLUME,
+                                           mute_at_zero=True))
+        bus.pot_event.emit(0, 0)
+        audio.set_mute.assert_called_once_with(True, target=None)
+        audio.set_volume.assert_not_called()   # mute only — głośność nietknięta
+
+    def test_off_zero_unmutes_and_sets_volume(self, qapp, bus):
+        audio = MagicMock()
+        disp = PotDispatcher(bus, audio, settings=_settings())
+        disp.set_profile(_profile_with_pot(action=PotAction.SYSTEM_VOLUME,
+                                           mute_at_zero=True))
+        bus.pot_event.emit(0, 4095)
+        audio.set_mute.assert_called_once_with(False, target=None)
+        audio.set_volume.assert_called_once()
+        assert audio.set_volume.call_args[0][0] > 0.99
+
+    def test_inverted_pot_mutes_at_4095(self, qapp, bus):
+        """Odwrócony pot: efektywne zero jest na ADC 4095."""
+        audio = MagicMock()
+        disp = PotDispatcher(bus, audio, settings=_settings())
+        disp.set_profile(_profile_with_pot(action=PotAction.SYSTEM_VOLUME,
+                                           invert=True, mute_at_zero=True))
+        bus.pot_event.emit(0, 4095)   # fizycznie "max" → efektywnie 0
+        audio.set_mute.assert_called_once_with(True, target=None)
+
+    def test_inverted_pot_unmutes_at_adc0(self, qapp, bus):
+        audio = MagicMock()
+        disp = PotDispatcher(bus, audio, settings=_settings())
+        disp.set_profile(_profile_with_pot(action=PotAction.SYSTEM_VOLUME,
+                                           invert=True, mute_at_zero=True))
+        bus.pot_event.emit(0, 0)   # fizyczne "min" → efektywnie max
+        audio.set_mute.assert_called_once_with(False, target=None)
+        audio.set_volume.assert_called_once()
+
+    def test_global_invert_moves_zero_position(self, qapp, bus):
+        """Globalne odwrócenie kierunku też przesuwa pozycję zerową."""
+        audio = MagicMock()
+        disp = PotDispatcher(bus, audio, settings=_settings(invert_all_pots=True))
+        disp.set_profile(_profile_with_pot(action=PotAction.SYSTEM_VOLUME,
+                                           mute_at_zero=True))
+        bus.pot_event.emit(0, 4095)   # globalnie odwrócone → efektywne 0
+        audio.set_mute.assert_called_once_with(True, target=None)
+
+    def test_global_toggle_enables_without_per_pot(self, qapp, bus):
+        """OR: global toggle sam w sobie wystarcza."""
+        audio = MagicMock()
+        disp = PotDispatcher(bus, audio, settings=_settings(mute_at_zero_all_pots=True))
+        disp.set_profile(_profile_with_pot(action=PotAction.SYSTEM_VOLUME))
+        bus.pot_event.emit(0, 0)
+        audio.set_mute.assert_called_once_with(True, target=None)
+
+    def test_both_disabled_never_touches_mute(self, qapp, bus):
+        """Bez funkcji: set_mute NIE jest wołane (nie ruszamy ręcznego mute'u)."""
+        audio = MagicMock()
+        disp = PotDispatcher(bus, audio, settings=_settings())
+        disp.set_profile(_profile_with_pot(action=PotAction.SYSTEM_VOLUME))
+        bus.pot_event.emit(0, 0)     # zero → flush natychmiast (count=1)
+        bus.pot_event.emit(0, 4095)  # max → w pending (throttle)
+        disp._flush()                # wymuś dostarczenie pending
+        audio.set_mute.assert_not_called()
+        assert audio.set_volume.call_count == 2
+
+    def test_app_volume_mutes_target_session(self, qapp, bus):
+        audio = MagicMock()
+        disp = PotDispatcher(bus, audio, settings=_settings())
+        disp.set_profile(_profile_with_pot(action=PotAction.APP_VOLUME,
+                                           target="spotify.exe",
+                                           mute_at_zero=True))
+        bus.pot_event.emit(0, 0)
+        audio.set_mute.assert_called_once_with(True, target="spotify.exe")
+
+    def test_none_action_never_mutes(self, qapp, bus):
+        audio = MagicMock()
+        disp = PotDispatcher(bus, audio, settings=_settings())
+        disp.set_profile(_profile_with_pot(action=PotAction.NONE,
+                                           mute_at_zero=True))
+        bus.pot_event.emit(0, 0)
+        audio.set_mute.assert_not_called()
+
+    def test_disabled_pot_never_mutes(self, qapp, bus):
+        audio = MagicMock()
+        disp = PotDispatcher(bus, audio, settings=_settings())
+        disp.set_profile(_profile_with_pot(action=PotAction.SYSTEM_VOLUME,
+                                           enabled=False, mute_at_zero=True))
+        bus.pot_event.emit(0, 0)
+        audio.set_mute.assert_not_called()
+
+    def test_game_volume_mutes_only_for_game(self, qapp, bus):
+        """GAME_VOLUME: mute tylko gdy foreground pasuje do listy gier."""
+        settings = _settings()
+        settings.game_apps = ["cs2.exe"]
+        window_backend = MagicMock()
+        window_backend.active_process_name.return_value = "cs2.exe"
+        audio = MagicMock()
+        disp = PotDispatcher(bus, audio, settings=settings,
+                             window_backend=window_backend)
+        disp.set_profile(_profile_with_pot(action=PotAction.GAME_VOLUME,
+                                           mute_at_zero=True))
+        bus.pot_event.emit(0, 0)
+        audio.set_mute.assert_called_once_with(True, target="cs2.exe")
+
+    def test_game_volume_skipped_when_not_game(self, qapp, bus):
+        """Foreground = przeglądarka → nic (żadnego mute, żadnej głośności)."""
+        settings = _settings()
+        settings.game_apps = ["cs2.exe"]
+        window_backend = MagicMock()
+        window_backend.active_process_name.return_value = "chrome.exe"
+        audio = MagicMock()
+        disp = PotDispatcher(bus, audio, settings=settings,
+                             window_backend=window_backend)
+        disp.set_profile(_profile_with_pot(action=PotAction.GAME_VOLUME,
+                                           mute_at_zero=True))
+        bus.pot_event.emit(0, 0)
+        audio.set_mute.assert_not_called()
+        audio.set_volume.assert_not_called()
+
+    def test_min_volume_gt_zero_still_mutes(self, qapp, bus):
+        """Mute zależy od POZYCJI gałki, nie wyliczonej głośności."""
+        audio = MagicMock()
+        disp = PotDispatcher(bus, audio, settings=_settings())
+        disp.set_profile(_profile_with_pot(action=PotAction.SYSTEM_VOLUME,
+                                           min_volume=0.2, mute_at_zero=True))
+        bus.pot_event.emit(0, 0)   # gałka na 0, ale vol=0.2
+        audio.set_mute.assert_called_once_with(True, target=None)
+
+    def test_sync_from_cache_restores_mute(self, qapp, bus):
+        """Przy starcie: pot zapamiętany na 0% → cel pozostaje wyciszony."""
+        settings = _settings()
+        settings.last_pot_values = [0] * 5
+        audio = MagicMock()
+        disp = PotDispatcher(bus, audio, settings=settings)
+        disp.set_profile(_profile_with_pot(action=PotAction.SYSTEM_VOLUME,
+                                           mute_at_zero=True))
+        audio.set_mute.assert_called_once_with(True, target=None)
+
+    def test_sync_from_cache_no_mute_when_mid_position(self, qapp, bus):
+        settings = _settings()
+        settings.last_pot_values = [2048] * 5
+        audio = MagicMock()
+        disp = PotDispatcher(bus, audio, settings=settings)
+        disp.set_profile(_profile_with_pot(action=PotAction.SYSTEM_VOLUME,
+                                           mute_at_zero=True))
+        audio.set_mute.assert_not_called()

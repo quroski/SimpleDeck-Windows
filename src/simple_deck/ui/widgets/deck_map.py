@@ -571,6 +571,10 @@ class DeckMap(QFrame):
         bus.pot_level.connect(self._vu_bar.set_level)
         # V4: Przestaw komórki gdy użytkownik zmieni kolejność na PotsPage.
         bus.pot_order_changed.connect(self._arrange_pots)
+        # V7: Odśwież paski gdy user przełączy globalne odwrócenie kierunku
+        # (Ustawienia → Sterowanie) — bez tego paski pokazywały stary kierunek
+        # do restartu aplikacji (refresh_invert było martwe — bez subskrypcji).
+        bus.pot_invert_changed.connect(self.refresh_invert)
 
         # === Restore cached pot values (jeśli dostępne) ===
         # MCU wysyła POT_EVT dopiero na ZMIANĘ wartości, więc bez tego paski
@@ -617,8 +621,21 @@ class DeckMap(QFrame):
                 self._pot_grid.addWidget(self._pots[physical_idx], 0, display_pos)
 
     def refresh_invert(self) -> None:
-        if self._settings is not None:
-            self._invert_all = bool(getattr(self._settings, "invert_all_pots", False))
+        """V7: Przełączono globalne odwrócenie kierunku — odśwież paski.
+
+        Zaktualizuj ``_invert_all`` z ustawień i przerysuj widoczne paski
+        z zapamiętanych wartości ADC (ten sam wzorzec co blok restore
+        w ``__init__``). Subskrybowane przez ``bus.pot_invert_changed``.
+        """
+        if self._settings is None:
+            return
+        self._invert_all = bool(getattr(self._settings, "invert_all_pots", False))
+        cached = getattr(self._settings, "last_pot_values", None)
+        if not cached:
+            return
+        for i, val in enumerate(cached):
+            if 0 <= i < len(self._pots) and val is not None and val >= 0:
+                self._pots[i].set_value(self._display_value(i, val))
 
     def _display_value(self, idx: int, adc: int) -> int:
         per_pot_invert = False

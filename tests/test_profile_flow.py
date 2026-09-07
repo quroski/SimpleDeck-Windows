@@ -232,6 +232,36 @@ class TestProfileSaveLoadRoundtrip:
         assert _validate_hotkey_mode("", "") == "combo"
         assert _validate_hotkey_mode("combo", "F13") == "combo"
 
+    def test_v6_profile_mute_at_zero_defaults_false(self, qapp, tmp_home):
+        """V6→V7: stary profil bez mute_at_zero dostaje False (cicha migracja)."""
+        old_data = {
+            "name": "V6Profile",
+            "schema_version": 6,
+            "pots": [{"idx": 0, "action": "system_volume"}],
+        }
+        path = ProfileManager().directory / "V6Profile.json"
+        path.write_text(json.dumps(old_data), encoding="utf-8")
+
+        loaded = ProfileManager().load("V6Profile")
+        assert loaded is not None
+        assert loaded.schema_version == SCHEMA_VERSION
+        assert loaded.pots[0].mute_at_zero is False
+
+    def test_mute_at_zero_roundtrip(self, qapp, tmp_home):
+        """mute_at_zero=True przeżywa zapis + odczyt."""
+        mgr = ProfileManager()
+        mgr.ensure_default()
+        p = mgr.active
+        assert p is not None
+        p.pots[0].mute_at_zero = True
+        p.pots[1].mute_at_zero = False
+        mgr.save(p)
+
+        loaded = ProfileManager().load("Default")
+        assert loaded is not None
+        assert loaded.pots[0].mute_at_zero is True
+        assert loaded.pots[1].mute_at_zero is False
+
 
 class TestProfileCRUDFlow:
     """Pełny CRUD: create → rename → duplicate → delete."""

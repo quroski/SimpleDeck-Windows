@@ -28,7 +28,7 @@ on:
       version:
         description: 'Wersja do zbudowania (bez prefixu v, np. 1.1.0)'
         required: true
-        default: '1.1.0'
+        default: '1.1.1'
       prerelease:
         description: 'Oznacz release jako pre-release (beta)'
         type: boolean

@@ -17,35 +17,13 @@ def main() -> int:
     from .core.migration import migrate_legacy_config_dir
     migrate_legacy_config_dir()
 
-    # V8 fix: Napraw popsuty wpis autostartu w rejestrze Windows.
-    # Poprzednie wersje zapisywały: "Simple-Deck.exe" -m simple_deck
-    # co powoduje "Failed to launch python embedded interface" przy starcie
-    # Windows (bootloader PyInstallera nie obsługuje -m dla frozen bundle).
-    # Nadpisz wpis jeśli zawiera "-m simple_deck" (gwarantowany znak zepsutego
-    # wpisu z tej wersji) — tylko dla frozen buildów, dev (python -m) zostaje.
-    if sys.platform.startswith("win") and getattr(sys, "frozen", False):
-        try:
-            import winreg
-            key = winreg.OpenKey(
-                winreg.HKEY_CURRENT_USER,
-                r"Software\Microsoft\Windows\CurrentVersion\Run",
-                0, winreg.KEY_SET_VALUE | winreg.KEY_QUERY_VALUE,
-            )
-            try:
-                try:
-                    existing, _ = winreg.QueryValueEx(key, "SIMPLEDECK")
-                    if isinstance(existing, str) and "-m simple_deck" in existing:
-                        winreg.SetValueEx(
-                            key, "SIMPLEDECK", 0, winreg.REG_SZ,
-                            f'"{sys.executable}"',
-                        )
-                except FileNotFoundError:
-                    pass
-            finally:
-                key.Close()
-        except OSError:
-            # Brak dostępu do rejestru / brak klucza — ignoruj (autostart off)
-            pass
+    # V8 fix: Napraw popsuty wpis autostartu w rejestrze Windows (frozen)
+    # + usuń skróty "Simple Deck" z folderów Autostart — instalator tworzył
+    # skrót, aplikacja klucz Run: razem = DWA wpisy w Ustawieniach Windows.
+    # Jedyne źródło autostartu to klucz Run zarządzany przez aplikację.
+    from .core.autostart import remove_startup_shortcuts, repair_frozen_run_value
+    repair_frozen_run_value()
+    remove_startup_shortcuts()
 
     args = sys.argv[1:]
     demo_mode = "--demo" in args

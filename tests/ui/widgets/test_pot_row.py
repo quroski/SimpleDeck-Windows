@@ -65,3 +65,43 @@ class TestPotRowReorder:
         row = PotRow(cfg)
         assert row._up_btn.isEnabled() is True
         assert row._down_btn.isEnabled() is True
+
+
+class TestPotRowMuteAtZero:
+    """V7: Checkbox 'Wycisz przy pozycji 0%' — stan + persistencja w configu."""
+
+    def test_checkbox_reflects_config(self, qapp):
+        row = PotRow(PotConfig(idx=0, mute_at_zero=True))
+        assert row._mute_at_zero.isChecked() is True
+        row2 = PotRow(PotConfig(idx=0))
+        assert row2._mute_at_zero.isChecked() is False
+
+    def test_toggle_emits_config_with_mute_at_zero(self, qapp):
+        row = PotRow(PotConfig(idx=1))
+        emitted = MagicMock()
+        row.changed.connect(emitted)
+        row._mute_at_zero.setChecked(True)
+        emitted.assert_called_once()
+        _idx, cfg = emitted.call_args[0]
+        assert cfg.mute_at_zero is True
+        # rebuild nie gubi innych pól (label, invert — znana pułapka _on_changed)
+        assert cfg.label == PotConfig(idx=1).label
+        assert cfg.invert is False
+
+    def test_rebuild_preserves_existing_fields(self, qapp):
+        """Zmiana innego pola NIE gubi mute_at_zero (trap _on_changed rebuild)."""
+        row = PotRow(PotConfig(idx=0, mute_at_zero=True, label="Bass",
+                               invert=True))
+        row._invert.setChecked(False)   # zmiana innego pola → rebuild
+        cfg = row.get_config()
+        assert cfg.mute_at_zero is True   # zachowane
+        assert cfg.label == "Bass"        # zachowane
+        assert cfg.invert is False        # zaktualizowane
+
+    def test_uncheck_emits_mute_at_zero_false(self, qapp):
+        row = PotRow(PotConfig(idx=0, mute_at_zero=True))
+        emitted = MagicMock()
+        row.changed.connect(emitted)
+        row._mute_at_zero.setChecked(False)
+        _idx, cfg = emitted.call_args[0]
+        assert cfg.mute_at_zero is False

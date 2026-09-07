@@ -192,6 +192,23 @@ def wire_application(app: QApplication, demo_mode: bool = False,
     settings = Settings()
     settings.load()
 
+    # Migracja autostartu: usuń skróty "Simple Deck" z folderów Autostart
+    # (tworzone przez instalator Inno Setup task "startupicon"). Skrót + klucz
+    # Run = DWA wpisy "Simple Deck" w Ustawienia → Aplikacje → Uruchamianie.
+    # Gdy skrót był JEDYNYM autostartem (settings.autostart=False), przenieś
+    # autostart na klucz Run — user nie traci "startuj z systemem".
+    from .core.autostart import remove_startup_shortcuts, set_autostart
+    _removed = remove_startup_shortcuts()
+    if _removed and not getattr(settings, "autostart", False):
+        settings.autostart = True
+        try:
+            from .core.settings import settings_path
+            settings.to_json(settings_path())
+        except Exception:
+            log.warning("nie udało się zapisać settings.json po migracji autostartu")
+        set_autostart(True)
+        log.info("autostart zmigrowany ze skrótu Autostart na klucz Run")
+
     # Zastosuj wybrane urządzenie audio (jeśli ustawione)
     if hasattr(audio_backend, "set_output_device"):
         audio_backend.set_output_device(getattr(settings, "audio_output_device", ""))

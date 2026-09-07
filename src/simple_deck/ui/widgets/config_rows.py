@@ -304,6 +304,14 @@ class PotRow(_ConfigRow):
         self._invert.toggled.connect(lambda *_: self._on_changed())
         adv_l.addWidget(self._invert)
 
+        # V7: Wycisz przy pozycji 0% — łączy się LUB z globalnym
+        # mute_at_zero_all_pots (Ustawienia → Sterowanie). Ocena pozycji
+        # następuje PO odwróceniu kierunku.
+        self._mute_at_zero = QCheckBox("Wycisz przy pozycji 0%")
+        self._mute_at_zero.setChecked(bool(getattr(config, "mute_at_zero", False)))
+        self._mute_at_zero.toggled.connect(lambda *_: self._on_changed())
+        adv_l.addWidget(self._mute_at_zero)
+
         # V3: Kalibruj min/max
         self._calib_btn = QPushButton("◉ Kalibruj zakres")
         self._calib_btn.setCursor(Qt.PointingHandCursor)
@@ -380,6 +388,7 @@ class PotRow(_ConfigRow):
             min_volume=lo,
             max_volume=hi,
             invert=self._invert.isChecked(),
+            mute_at_zero=self._mute_at_zero.isChecked(),  # V7: nie gub opcji
             label=self._config.label,  # V1.0.3: nie gub nazwy z Overview
         )
         self._config = cfg

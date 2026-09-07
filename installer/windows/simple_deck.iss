@@ -12,7 +12,7 @@
 
 #define MyAppName           "Simple Deck"
 #ifndef MyAppVersion
-  #define MyAppVersion      "1.1.0"
+  #define MyAppVersion      "1.1.1"
 #endif
 #define MyAppPublisher      "GREJEM INDUSTRIES"
 #define MyAppURL            "https://github.com/grejem-industries/grejem-os"
@@ -74,7 +74,10 @@ Name: "polish";  MessagesFile: "compiler:Languages\Polish.isl"
 
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
-Name: "startupicon"; Description: "Uruchom przy &starcie systemu"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
+; Autostart NIE jest już tworzony przez instalator: wpis Run-key (SIMPLEDECK)
++ skrót w folderze Autostart = DWA wpisy "Simple Deck" w Ustawienia →
+Aplikacje → Uruchamianie. Jedyne źródło autostartu to checkbox w aplikacji
+(Ustawienia → System), zarządzający kluczem HKCU\...\Run\SIMPLEDECK.
 ; QuickLaunch usunięty (Windows 7+ nie ma paska Szybkiego uruchamiania)
 
 ; === Pliki aplikacji - skopiuj wszystko co PyInstaller wypluł ===
@@ -100,11 +103,11 @@ Name: "{commondesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; \
     Tasks: desktopicon; \
     IconFilename: "{app}\{#MyAppExeName}"
 
-; Autostart (opcjonalnie)
-Name: "{commonstartup}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; \
-    Tasks: startupicon; \
-    IconFilename: "{app}\{#MyAppExeName}"; \
-    WorkingDir: "{app}"
+; Autostart: usunięto skrót {commonstartup} (duplikował wpis autostartu).
+; [InstallDelete] sprząta skróty z installacji starszych wersji.
+[InstallDelete]
+Type: files; Name: "{commonstartup}\{#MyAppName}.lnk"
+Type: files; Name: "{userstartup}\{#MyAppName}.lnk"
 
 ; === Rejestr Windows - informacje o aplikacji ===
 [Registry]

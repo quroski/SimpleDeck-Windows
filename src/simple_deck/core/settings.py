@@ -95,6 +95,9 @@ class Settings:
     recent_apps: list[str] = field(default_factory=list)
     # Globalne odwrócenie kierunku wszystkich potencjometrów (hw wiring fix)
     invert_all_pots: bool = False
+    # Globalne wyciszanie przy pozycji 0%: pot w pozycji zerowej (po odwróceniu)
+    # ustawia mute danego celu. Łączy się LUB z per-pot PotConfig.mute_at_zero.
+    mute_at_zero_all_pots: bool = False
     # Ostatnie znane wartości potencjometrów (cache dla UI przy starcie)
     # 5 wartości ADC 0..4095; -1 = nieznane (zostanie nadpisane przez POT_EVT)
     last_pot_values: list[int] = field(default_factory=lambda: [-1] * 5)
@@ -123,6 +126,7 @@ class Settings:
             "auto_switch_rules": {str(k): str(v) for k, v in self.auto_switch_rules.items()},
             "recent_apps": [str(a) for a in self.recent_apps],
             "invert_all_pots": bool(self.invert_all_pots),
+            "mute_at_zero_all_pots": bool(self.mute_at_zero_all_pots),
             "last_pot_values": [int(v) for v in self.last_pot_values],
             "show_tray_icon": bool(self.show_tray_icon),
             "minimize_to_tray_on_close": bool(self.minimize_to_tray_on_close),
@@ -163,6 +167,7 @@ class Settings:
             },
             recent_apps=[str(a) for a in (d.get("recent_apps") or [])][:50],
             invert_all_pots=bool(d.get("invert_all_pots", False)),
+            mute_at_zero_all_pots=bool(d.get("mute_at_zero_all_pots", False)),
             last_pot_values=lpv,
             show_tray_icon=bool(d.get("show_tray_icon", False)),
             minimize_to_tray_on_close=bool(d.get("minimize_to_tray_on_close", False)),

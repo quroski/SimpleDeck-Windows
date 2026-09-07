@@ -727,14 +727,36 @@ class SettingsPage(QWidget):
         cb.setChecked(bool(getattr(self._settings, "invert_all_pots", False)))
         cb.toggled.connect(self._on_pot_invert_toggled)
         cl.addWidget(cb)
+        # V7: globalne wyciszanie przy pozycji 0% (łączy się LUB z per-pot
+        # 'Wycisz przy pozycji 0%' w ustawieniach zaawansowanych pota).
+        cl.addWidget(QLabel(
+            "Wyciszanie przy pozycji 0%: pot w pozycji zerowej (po uwzględnieniu "
+            "odwrócenia kierunku) wycisza cel, którego głośność reguluje. "
+            "Ruch z zera odcisza i przywraca głośność z pota.",
+            objectName="sectionSubtitle"))
+        self._mute_zero_cb = QCheckBox("Wycisz przy 0% (wszystkie potencjometry)")
+        self._mute_zero_cb.setChecked(
+            bool(getattr(self._settings, "mute_at_zero_all_pots", False)))
+        self._mute_zero_cb.toggled.connect(self._on_mute_zero_toggled)
+        cl.addWidget(self._mute_zero_cb)
         return card
 
     def _on_pot_invert_toggled(self, checked: bool) -> None:
         self._settings.invert_all_pots = bool(checked)
         self._save_settings()
+        # V7: powiadom DeckMap (Overview) — odśwież paski bez restartu.
+        self._bus.pot_invert_changed.emit()
         self._notify("info",
                      "Globalne odwrócenie potencjometrów: WŁĄCZONE" if checked
                      else "Globalne odwrócenie potencjometrów: wyłączone")
+
+    def _on_mute_zero_toggled(self, checked: bool) -> None:
+        """V7: globalny mute przy 0% — zapis + potwierdzenie."""
+        self._settings.mute_at_zero_all_pots = bool(checked)
+        self._save_settings()
+        self._notify("info",
+                     "Wyciszanie przy 0%: WŁĄCZONE" if checked
+                     else "Wyciszanie przy 0%: wyłączone")
 
     def _card_auto_switch(self) -> QFrame:
         card, cl = self._card("Auto-przełączanie profili", "branch")
@@ -1015,45 +1037,10 @@ class SettingsPage(QWidget):
         self._save_settings()
 
     def _apply_autostart(self, enable: bool) -> bool:
-        try:
-            if sys.platform.startswith("win"):
-                import winreg
-                key = winreg.OpenKey(winreg.HKEY_CURRENT_USER,
-                                     r"Software\Microsoft\Windows\CurrentVersion\Run",
-                                     0, winreg.KEY_SET_VALUE)
-                try:
-                    if enable:
-                        # V8 fix: For PyInstaller-frozen bundles, sys.executable
-                        # is the Simple-Deck.exe launcher. The "-m simple_deck"
-                        # argument is Python-only and causes the bootloader to
-                        # fail with "Failed to launch python embedded interface"
-                        # during Windows autostart (which runs before the user's
-                        # shell is fully up). Detect frozen state and use just
-                        # the executable path - PyInstaller's bootloader handles
-                        # the rest.
-                        if getattr(sys, "frozen", False):
-                            cmd = f'"{sys.executable}"'
-                        else:
-                            cmd = f'"{sys.executable}" -m simple_deck'
-                        winreg.SetValueEx(key, "SIMPLEDECK", 0, winreg.REG_SZ, cmd)
-                        # Wyczyść legacy wpis po aktualizacji z grejem-os.
-                        try:
-                            winreg.DeleteValue(key, "GREJEMOS")
-                        except FileNotFoundError:
-                            pass
-                    else:
-                        for name in ("SIMPLEDECK", "GREJEMOS"):
-                            try:
-                                winreg.DeleteValue(key, name)
-                            except FileNotFoundError:
-                                pass
-                finally:
-                    key.Close()
-                return True
-            return False
-        except Exception:
-            log.exception("autostart apply failed")
-            return False
+        # Delegacja do core.autostart — jedyne źródło prawdy dla klucza Run.
+        # (Logika zapisu HKCU\...\Run\SIMPLEDECK + sprzątanie legacy GREJEMOS.)
+        from ...core.autostart import set_autostart
+        return set_autostart(enable)
 
     def _card_audio_device(self) -> QFrame:
         card, cl = self._card("Urządzenie wyjściowe audio", "volume")
