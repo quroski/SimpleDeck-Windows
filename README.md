@@ -53,27 +53,7 @@ Repozytorium-matka: [KacperL-i2c/simpleDeck_V3](https://github.com/KacperL-i2c/s
 Pobierz najnowszą wersję [instalatora .exe](https://github.com/quroski/SimpleDeck-Windows/releases) i uruchom na swoim PC
 
 
-Instalator i pliki aplikacji są cyfrowo podpisane (**GREJEM INDUSTRIES**, Azure Artifact Signing — Microsoft Trusted Signing). Windows Defender/SmartScreen nie powinny ostrzegać przed instalatorem; SmartScreen buduje reputację pliku automatycznie i przy pierwszych wydaniach może jeszcze wyświetlić "Więcej informacji → Uruchom mimo to".
-
-Licencja: MIT © 2026 GREJEM INDUSTRIES.
-
-<details>
-<summary>Podpis w lokalnym buildzie (opcjonalnie)</summary>
-
-`build.ps1` podpisuje artefakty automatycznie, gdy ustawione są zmienne środowiskowe:
-
-| Zmienna | Znaczenie |
-|---|---|
-| `SIGN_ENDPOINT` | regionalny endpoint konta, np. `https://eus.codesigning.azure.net` |
-| `SIGN_ACCOUNT` | nazwa Artifact Signing account |
-| `SIGN_PROFILE` | nazwa certificate profile (Public Trust) |
-| `AZURE_TENANT_ID` | Entra tenant (service principal) |
-| `AZURE_CLIENT_ID` | app (client) ID |
-| `AZURE_CLIENT_SECRET` | secret service principal |
-
-Bez nich build działa normalnie, ale artefakty są niepodpisane.
-
-</details>
+Istnieje ryzyko pop-up z Windows Defender. Jest to spowodowane brakiem cyfrowego podpisu oprogramowania. Autorzy nie ponoszą odpowiedzialności za jakiekolwiek problemy wynikające z funkcjonowania/instalacji oprogramowania.
 
 ### Zawartość instalacji
 

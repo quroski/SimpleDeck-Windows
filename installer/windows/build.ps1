@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
     Buduje aplikację Simple Deck i instalatory Windows (.exe + .msi)
 
@@ -31,17 +31,6 @@
 
 .PARAMETER PythonExe
     Ścieżka do python.exe (domyślnie "python" z PATH).
-
-.NOTES
-    Podpis kodu (Windows Defender / SmartScreen):
-    Gdy ustawione są zmienne środowiskowe SIGN_ENDPOINT, SIGN_ACCOUNT,
-    SIGN_PROFILE, AZURE_TENANT_ID, AZURE_CLIENT_ID i AZURE_CLIENT_SECRET,
-    build automatycznie podpisuje wszystkie pliki .exe/.dll z dist\Simple-Deck
-    oraz instalator .exe przez Azure Artifact Signing (dawniej Trusted
-    Signing). Bez nich krok podpisu jest pomijany (build pozostaje unsigned).
-    SIGN_ENDPOINT to regionalny endpoint konta (np. https://eus.codesigning.azure.net),
-    SIGN_ACCOUNT/SIGN_PROFILE to nazwy konta i profilu certyfikatu.
-    Sekrety w CI: repo Settings -> Secrets -> Actions (patrz release.yml).
 
 .EXAMPLE
     .\build.ps1                # pełny build: .exe + .msi
@@ -149,132 +138,6 @@ function Find-WixToolset {
     }
 
     return $null
-}
-
-# ============================================================
-#  Podpis kodu: Azure Artifact Signing (dawniej Trusted Signing)
-#  Docs: learn.microsoft.com/azure/artifact-signing/how-to-signing-integrations
-#  SignTool + dlib (Microsoft.ArtifactSigning.Client; dll wciąż nazywa się
-#  Azure.CodeSigning.Dlib.dll) + metadata.json (Endpoint/account/profile).
-#  Certyfikaty usługi żyją 3 dni -> timestamping jest OBOWIĄZKOWY
-#  (http://timestamp.acs.microsoft.com, RFC3161, SHA256).
-#  Autoryzacja: DefaultAzureCredential -> EnvironmentCredential czyta
-#  standardowe AZURE_TENANT_ID / AZURE_CLIENT_ID / AZURE_CLIENT_SECRET.
-# ============================================================
-function Test-SigningConfigured {
-    $vars = @('SIGN_ENDPOINT', 'SIGN_ACCOUNT', 'SIGN_PROFILE',
-              'AZURE_TENANT_ID', 'AZURE_CLIENT_ID', 'AZURE_CLIENT_SECRET')
-    foreach ($v in $vars) {
-        if ([string]::IsNullOrEmpty([System.Environment]::GetEnvironmentVariable($v))) {
-            return $false
-        }
-    }
-    return $true
-}
-
-function Find-SignTool {
-    # Windows SDK signtool.exe (wymagany >= 10.0.2261.755 dla dlib)
-    $kitsRoot = "${env:ProgramFiles(x86)}\Windows Kits\10\bin"
-    if (Test-Path $kitsRoot) {
-        $ver = Get-ChildItem -LiteralPath $kitsRoot -Directory |
-            Where-Object { $_.Name -match '^\d+\.\d+\.\d+(\.\d+)?$' } |
-            Sort-Object { [version]$_.Name } -Descending |
-            Select-Object -First 1
-        if ($ver) {
-            foreach ($arch in @("x64", "x86")) {
-                $p = Join-Path $ver.FullName "$arch\signtool.exe"
-                if (Test-Path $p) { return $p }
-            }
-        }
-    }
-    # Fallback: PATH
-    $fromPath = (Get-Command signtool.exe -ErrorAction SilentlyContinue).Source
-    if ($fromPath -and (Test-Path $fromPath)) { return $fromPath }
-    return $null
-}
-
-function Invoke-TrustedSigning {
-    param(
-        [Parameter(Mandatory=$true)][string]   $SignTool,
-        [Parameter(Mandatory=$true)][string[]] $Files
-    )
-
-    # --- dlib: pobierz raz do TEMP (nuget install -x; układ wewnątrz pakietu
-    # bywa różny między wersjami -> DLL lokalizujemy rekurencyjnie) ---
-    $dlibRoot = Join-Path $env:TEMP "artifact-signing-dlib"
-    $dlibDll = $null
-    if (Test-Path $dlibRoot) {
-        $dlibDll = Get-ChildItem -LiteralPath $dlibRoot -Recurse -Filter "Azure.CodeSigning.Dlib.dll" |
-            Where-Object { $_.FullName -match '\\x64\\' } |
-            Select-Object -First 1 -ExpandProperty FullName
-    }
-    if (-not $dlibDll) {
-        Write-Host "  [sign] pobieram Microsoft.ArtifactSigning.Client (dlib)..."
-        New-Item -ItemType Directory -Force $dlibRoot | Out-Null
-        $nuget = Join-Path $dlibRoot "nuget.exe"
-        Invoke-WebRequest -Uri "https://dist.nuget.org/win-x86-commandline/latest/nuget.exe" -OutFile $nuget -UseBasicParsing
-        & $nuget install "Microsoft.ArtifactSigning.Client" -x -NonInteractive -OutputDirectory $dlibRoot 2>&1 | Out-Null
-        if ($LASTEXITCODE -ne 0) { throw "nuget install Microsoft.ArtifactSigning.Client failed" }
-        $dlibDll = Get-ChildItem -LiteralPath $dlibRoot -Recurse -Filter "Azure.CodeSigning.Dlib.dll" |
-            Where-Object { $_.FullName -match '\\x64\\' } |
-            Select-Object -First 1 -ExpandProperty FullName
-        if (-not $dlibDll) {
-            $dlibDll = Get-ChildItem -LiteralPath $dlibRoot -Recurse -Filter "Azure.CodeSigning.Dlib.dll" |
-                Select-Object -First 1 -ExpandProperty FullName
-        }
-    }
-    if (-not $dlibDll) { throw "Azure.CodeSigning.Dlib.dll nie znaleziony po instalacji dlib" }
-    Write-Host "  [sign] dlib: $dlibDll"
-
-    # --- metadata.json (Endpoint MUSI pasować do regionu konta; inaczej 403) ---
-    $metaPath = Join-Path $env:TEMP ("ts-metadata-{0}.json" -f $PID)
-    $meta = [ordered]@{
-        Endpoint               = $env:SIGN_ENDPOINT
-        CodeSigningAccountName = $env:SIGN_ACCOUNT
-        CertificateProfileName = $env:SIGN_PROFILE
-        # CI: tylko EnvironmentCredential (service principal) - bez cache/CLI
-        # (DefaultAzureCredential próbowałby też interaktywnego logowania).
-        ExcludeCredentials     = @(
-            "ManagedIdentityCredential", "WorkloadIdentityCredential",
-            "SharedTokenCacheCredential", "VisualStudioCredential",
-            "VisualStudioCodeCredential", "AzureCliCredential",
-            "AzurePowerShellCredential", "AzureDeveloperCliCredential",
-            "InteractiveBrowserCredential"
-        )
-    }
-    if ($env:SIGN_CORRELATION_ID) { $meta.CorrelationId = $env:SIGN_CORRELATION_ID }
-    [System.IO.File]::WriteAllText($metaPath, ($meta | ConvertTo-Json -Depth 4),
-        (New-Object System.Text.UTF8Encoding($false)))
-
-    # --- podpis: PS 5.1 (localhost) traktuje stderr native command jako
-    # terminating error przy EAP=Stop. Continue + 2>&1 + $LASTEXITCODE. ---
-    $prevEAP = $ErrorActionPreference
-    $ErrorActionPreference = 'Continue'
-    try {
-        Write-Host ("  [sign] podpisuję {0} plik(ów) jednym wywołaniem..." -f $Files.Count)
-        & $SignTool sign /v /fd SHA256 `
-            /tr "http://timestamp.acs.microsoft.com" /td SHA256 `
-            /dlib "$dlibDll" /dmdf "$metaPath" @Files 2>&1
-        if ($LASTEXITCODE -ne 0) {
-            Write-Warning "  [sign] batch nie powiódł się - ponawiam per plik (diagnostyka)"
-            foreach ($f in $Files) {
-                if (-not (Test-Path -LiteralPath $f)) {
-                    Write-Warning "  [sign] pomijam (brak pliku): $f"
-                    continue
-                }
-                Write-Host ("  [sign] {0}" -f (Split-Path -Leaf $f))
-                & $SignTool sign /v /fd SHA256 `
-                    /tr "http://timestamp.acs.microsoft.com" /td SHA256 `
-                    /dlib "$dlibDll" /dmdf "$metaPath" "$f" 2>&1
-                if ($LASTEXITCODE -ne 0) {
-                    throw "signtool nie mógł podpisać: $f (exit $LASTEXITCODE)"
-                }
-            }
-        }
-    } finally {
-        $ErrorActionPreference = $prevEAP
-        Remove-Item -Force $metaPath -ErrorAction SilentlyContinue
-    }
 }
 
 # ============================================================
@@ -395,23 +258,6 @@ if (-not (Get-Command $PythonExe -ErrorAction SilentlyContinue)) {
 }
 Write-Host "  Wersja aplikacji: $appVersion"
 
-# Wczesna detekcja podpisu (Azure Artifact Signing). SignTool potrzebny tylko
-# gdy konfiguracja podpisu jest kompletna - inaczej krok jest pomijany.
-# UWAGA: kompletna konfiguracja SIGN_* + brak SignTool = HARD FAIL (nie budujemy
-# cicho niepodpisanych wydań, gdy ktoś myśli że podpis działa).
-$signConfigured = Test-SigningConfigured
-$signTool = $null
-if ($signConfigured) {
-    Write-Host "  Podpis: konfiguracja SIGN_* kompletna (Azure Artifact Signing)" -ForegroundColor Green
-    $signTool = Find-SignTool
-    if (-not $signTool) {
-        throw "Konfiguracja podpisu (SIGN_*) ustawiona, ale signtool.exe nie znaleziony. Zainstaluj Windows SDK: https://developer.microsoft.com/windows/downloads/windows-sdk/"
-    }
-    Write-Host "  Podpis: SignTool = $signTool"
-} else {
-    Write-Warning "Podpis kodu WYŁĄCZONY - ustaw SIGN_ENDPOINT/SIGN_ACCOUNT/SIGN_PROFILE + AZURE_TENANT_ID/AZURE_CLIENT_ID/AZURE_CLIENT_SECRET (Defender/SmartScreen będą ostrzegać)."
-}
-
 # Wczesna detekcja WiX (by ostrzec, jeśli .msi nie da się zbudować)
 if (-not $SkipMsi) {
     $wix = Find-WixToolset
@@ -471,9 +317,6 @@ if ($LASTEXITCODE -ne 0) { throw "pyinstaller install failed" }
 #  Krok 3: PyInstaller build
 # ============================================================
 Write-Step "Krok 3/6: PyInstaller build (simple_deck.spec)"
-# Wersja do zasobu Win32 VersionInfo (spec czyta SIMPLE_DECK_VERSION): zakładka
-# "Szczegóły" w Simple-Deck.exe + LegalCopyright "MIT (c) 2026 GREJEM INDUSTRIES".
-$env:SIMPLE_DECK_VERSION = $appVersion
 Push-Location $here
 # PS 5.1 (localhost) traktuje stderr native command jako terminating error przy
 # ErrorActionPreference=Stop. PS 7 (CI) nie ma tego problemu. Continue + $LASTEXITCODE
@@ -494,23 +337,6 @@ try {
 $appDist = Join-Path $here "dist\Simple-Deck"
 if (-not (Test-Path $appDist)) {
     throw "Brak $appDist po buildzie PyInstallerem"
-}
-
-# ============================================================
-#  Krok 3.5: Podpis plików aplikacji (Azure Artifact Signing)
-#  Podpisujemy każdy .exe/.dll w dist\Simple-Deck PRZED spakowaniem przez
-#  Inno Setup - instalator propaguje podpisy plików (podpisany główny exe,
-#  python*.dll, hidapi.dll itd.). Sam instalator podpisujemy w kroku 4.5.
-# ============================================================
-if ($signConfigured) {
-    Write-Step "Krok 3.5/6: Podpis plików aplikacji (Artifact Signing)"
-    $appFiles = @(Get-ChildItem -LiteralPath $appDist -File |
-        Where-Object { $_.Extension -in ".exe", ".dll" } |
-        ForEach-Object { $_.FullName })
-    if ($appFiles.Count -eq 0) { throw "Brak plików .exe/.dll w $appDist" }
-    Invoke-TrustedSigning -SignTool $signTool -Files $appFiles
-} else {
-    Write-Host "  (podpis wyłączony - brak kompletnej konfiguracji SIGN_*)"
 }
 
 # ============================================================
@@ -537,16 +363,6 @@ if (-not $SkipExe) {
         Write-Host "  ISCC: $iscc"
         & $iscc /Q /dMyAppVersion=$appVersion $innoScript
         if ($LASTEXITCODE -ne 0) { throw "Inno Setup failed" }
-
-        # Krok 4.5: podpis finalnego instalatora (po ISCC - podpisujemy
-        # gotowy .exe setupu; to on jest ściągany z GitHub Releases i
-        # weryfikowany przez Defender/SmartScreen).
-        if ($signConfigured) {
-            if (-not (Test-Path $exeInstaller)) {
-                throw "Brak instalatora do podpisu: $exeInstaller"
-            }
-            Invoke-TrustedSigning -SignTool $signTool -Files @($exeInstaller)
-        }
     }
 } else {
     Write-Host "  (pominięto -SkipExe)"
@@ -677,20 +493,6 @@ if ((-not $SkipMsi) -and (Test-Path $msiInstaller)) {
     $built += $msiInstaller
 } elseif (-not $SkipMsi) {
     Write-Warning "Nie znaleziono: $msiInstaller"
-}
-
-# Weryfikacja podpisu (diagnostyka; signtool verify /pa = domyślny store Windows)
-if ($signConfigured -and $built.Count -gt 0) {
-    Write-Host ""
-    Write-Host "  Podpis (signtool verify /pa):" -ForegroundColor Cyan
-    foreach ($f in $built) {
-        $null = & $signTool verify /pa "$f" 2>&1
-        $ok = if ($LASTEXITCODE -eq 0) { "OK  " } else { "FAIL" }
-        Write-Host ("    [{0}] {1}" -f $ok, (Split-Path -Leaf $f))
-        if ($LASTEXITCODE -ne 0) {
-            Write-Warning ("    Weryfikacja nie przeszła: {0}" -f $f)
-        }
-    }
 }
 
 if ($built.Count -eq 0) {

@@ -16,18 +16,6 @@
 #  Interakcja z lokalnym CLI (scripts/release.py):
 #    - Lokalny release.py (--ci) pushuje TYLKO tag; ten workflow buduje
 #      i tworzy release w chmurze.
-#
-#  PODPIS KODU (Azure Artifact Signing, dawniej Trusted Signing):
-#    build.ps1 podpisuje pliki aplikacji + instalator, gdy w sekretach repo
-#    ustawione są (Settings -> Secrets and variables -> Actions):
-#      SIGN_ENDPOINT        - regionalny endpoint konta, np. https://eus.codesigning.azure.net
-#      SIGN_ACCOUNT         - nazwa Artifact Signing account
-#      SIGN_PROFILE         - nazwa certificate profile (Public Trust)
-#      AZURE_TENANT_ID      - Entra tenant (service principal)
-#      AZURE_CLIENT_ID      - app (client) ID service principal
-#      AZURE_CLIENT_SECRET  - secret service principal
-#    Principal musi mieć rolę "Artifact Signing Certificate Profile Signer".
-#    Bez sekretów build działa normalnie, ale artefakty są niepodpisane.
 # ============================================================================
 name: Release
 
@@ -63,21 +51,6 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Install SignTool (Windows SDK BuildTools)
-        shell: pwsh
-        run: |
-          # Podpis (Azure Artifact Signing) wymaga signtool.exe z Windows SDK
-          # >= 10.0.2261.755 (dlib nie działa z wersją z VS/Inno). Instalujemy
-          # przez nuget.exe do katalogu lokalnego runnera.
-          Invoke-WebRequest -Uri https://dist.nuget.org/win-x86-commandline/latest/nuget.exe -OutFile nuget.exe -UseBasicParsing
-          & .\nuget.exe install Microsoft.Windows.SDK.BuildTools -x -NonInteractive -OutputDirectory "${{ github.workspace }}\sdktools"
-          $signtool = Get-ChildItem -Path "${{ github.workspace }}\sdktools" -Recurse -Filter signtool.exe |
-            Where-Object { $_.FullName -match 'x64' } | Select-Object -First 1 -ExpandProperty FullName
-          if (-not $signtool) { throw "signtool.exe nie znaleziony po instalacji SDK BuildTools" }
-          $dir = Split-Path -Parent $signtool
-          echo $dir >> $env:GITHUB_PATH
-          Write-Host "signtool: $signtool"
-
       - name: Install Inno Setup 6
         shell: pwsh
         run: |
@@ -102,15 +75,6 @@ jobs:
 
       - name: Build installer (.exe)
         shell: pwsh
-        env:
-          # Podpis kodu (Azure Artifact Signing) - krok w build.ps1 aktywuje się
-          # tylko gdy WSZYSTKIE sekrety są ustawione; inaczej pomijany (unsigned).
-          SIGN_ENDPOINT: ${{ secrets.SIGN_ENDPOINT }}
-          SIGN_ACCOUNT: ${{ secrets.SIGN_ACCOUNT }}
-          SIGN_PROFILE: ${{ secrets.SIGN_PROFILE }}
-          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
-          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
-          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
         run: |
           Set-Location installer\windows
           # -SkipMsi: WiX v4+ nie ma 'heat' CLI; .msi wymagalby rekompilacji build.ps1.
@@ -127,19 +91,6 @@ jobs:
           }
           $sz = [math]::Round((Get-Item $exe).Length / 1MB, 1)
           Write-Host "OK: $exe ($sz MB)"
-
-      - name: Verify signatures
-        shell: pwsh
-        run: |
-          # Raport (nie fail): /pa = weryfikacja domyślnym storem Windows.
-          # Podpis jest widoczny jako "GREJEM INDUSTRIES" w właściwościach pliku.
-          $v = "${{ steps.ver.outputs.version }}"
-          $exe = "installer\windows\output\Simple-Deck-Setup-$v.exe"
-          if (Test-Path $exe) {
-            & signtool verify /pa /v $exe
-            if ($LASTEXITCODE -eq 0) { Write-Host "PODPIS OK: $exe" }
-            else { Write-Host "BRAK PODPISU / weryfikacja nie przeszła (exit $LASTEXITCODE) - ustaw sekrety SIGN_* aby podpisywać." }
-          }
 
       - name: Create or update GitHub Release
         env:

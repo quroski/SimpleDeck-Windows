@@ -10,7 +10,6 @@
       pyinstaller simple_deck.spec --noconfirm --clean
   ==========================================================================="""
 import os
-import re
 from PyInstaller.utils.hooks import collect_data_files, collect_submodules
 
 # Ścieżki względne do tego pliku
@@ -18,75 +17,6 @@ HERE = os.path.dirname(os.path.abspath(SPEC))
 ROOT = os.path.abspath(os.path.join(HERE, "..", ".."))
 DESKTOP = ROOT  # W nowym repo desktop jest w root
 ICONS = os.path.join(ROOT, "installer", "icons")
-
-# === Win32 VersionInfo ("Prawy klik -> Właściwości -> Szczegóły") ===
-# Wersja z SIMPLE_DECK_VERSION (ustawiane przez build.ps1 z pyproject.toml);
-# fallback: parsowanie pyproject na wypadek ręcznych buildów bez build.ps1.
-_app_version = os.environ.get("SIMPLE_DECK_VERSION") or "0.0.0"
-if _app_version == "0.0.0":
-    try:
-        with open(os.path.join(ROOT, "pyproject.toml"), "r", encoding="utf-8") as _f:
-            _m = re.search(r'^version\s*=\s*"([^"]+)"', open(
-                os.path.join(ROOT, "pyproject.toml"), encoding="utf-8").read(), re.M)
-        if _m:
-            _app_version = _m.group(1)
-    except OSError:
-        pass
-
-#wersja może zawierać sufiks alfa (np. 1.1.0a) -> VS_VERSIONINFO chce czterech
-#liczb; sufiks idzie do ProductVersion (string),FileVersion dostaje x.y.z.0.
-_ver_core = re.match(r"(\d+(?:\.\d+)*)", _app_version)
-_ver_nums = [int(x) for x in (_ver_core.group(1).split(".") if _ver_core else ["0"])]
-while len(_ver_nums) < 4:
-    _ver_nums.append(0)
-
-# Tekst zasobu VS_VERSIONINFO (format PyInstaller: pythonowa deklaracja).
-# LegalCopyright = MIT (c) 2026 GREJEM INDUSTRIES -> widoczne w Zakładce
-# "Szczegóły" pliku Simple-Deck.exe (Defender/SmartScreen też czytają te pola).
-_versioninfo_tpl = """# UTF-8
-#
-# For more details about fixed file info 'ffi' see:
-# http://msdn.microsoft.com/en-us/library/ms646997.aspx
-VSVersionInfo(
-  ffi=FixedFileInfo(
-    filevers=(_V0, _V1, _V2, _V3),
-    prodvers=(_V0, _V1, _V2, _V3),
-    mask=0x3f,
-    flags=0x0,
-    OS=0x40004,
-    fileType=0x1,
-    subtype=0x0,
-    date=(0, 0)
-  ),
-  kids=[
-    StringFileInfo([
-      StringTable(
-        u'040904B0',
-        [StringStruct(u'CompanyName', u'GREJEM INDUSTRIES'),
-        StringStruct(u'FileDescription', u'Simple Deck - Stream Deck Controller'),
-        StringStruct(u'FileVersion', u'~FILEVERSION~'),
-        StringStruct(u'InternalName', u'Simple-Deck'),
-        StringStruct(u'LegalCopyright', u'MIT Copyright (c) 2026 GREJEM INDUSTRIES'),
-        StringStruct(u'LegalTrademarks', u'Simple Deck is distributed under the MIT License'),
-        StringStruct(u'OriginalFilename', u'Simple-Deck.exe'),
-        StringStruct(u'ProductName', u'Simple Deck'),
-        StringStruct(u'ProductVersion', u'~PRODUCTVERSION~')]),
-    VarFileInfo([VarStruct(u'Translation', [1033, 1200])])
-  ]
-)
-"""
-_versioninfo_txt = (_versioninfo_tpl
-                    .replace("_V0", str(_ver_nums[0]))
-                    .replace("_V1", str(_ver_nums[1]))
-                    .replace("_V2", str(_ver_nums[2]))
-                    .replace("_V3", str(_ver_nums[3]))
-                    .replace("~FILEVERSION~", _app_version)
-                    .replace("~PRODUCTVERSION~", _app_version))
-# Zapis obok spec - ścieżka przekazywana do EXE(version=...) jest relatywna
-# do katalogu pracy PyInstallera, więc podajemy bezwzględną.
-_version_info_path = os.path.join(HERE, "version_info.txt")
-with open(_version_info_path, "w", encoding="utf-8") as _vf:
-    _vf.write(_versioninfo_txt)
 
 block_cipher = None
 
@@ -187,7 +117,6 @@ exe = EXE(
     codesign_identity=None,
     entitlements_file=None,
     icon=os.path.join(ICONS, "simple_deck.ico"),
-    version=_version_info_path,  # Win32 VersionInfo: MIT (c) 2026 GREJEM INDUSTRIES
 )
 
 coll = COLLECT(
@@ -200,3 +129,9 @@ coll = COLLECT(
     upx_exclude=_UPX_EXCLUDE,
     name="Simple-Deck",
 )
+
+# === Wersja pliku (Win32 VersionInfo) ===
+# Aby .exe miał właściwą wersję w "Prawy klik → Właściwości → Szczegóły":
+# PyInstaller generuje VersionInfo na podstawie metadanych, ale możemy wymusić
+# przez zmienną środowiskową przed buildem:
+#   set SIMPLE_DECK_VERSION=1.0.0
