@@ -399,3 +399,95 @@ class TestMuteAtZero:
         disp.set_profile(_profile_with_pot(action=PotAction.SYSTEM_VOLUME,
                                            mute_at_zero=True))
         audio.set_mute.assert_not_called()
+
+
+class TestZeroPositionTolerance:
+    """V1.1.2: Tolerancja pozycji zerowej (3.5% skali ≈ 143 ADC).
+
+    Bug z backendu: realne potencjometry NIGDY nie raportują dokładnie ADC 0
+    (end-stop tolerancja ±1-3%, szum ADC, filtr EMA). User raportował poty
+    stające na 97-99% przy max — analogicznie min daje ADC ~60-140 zamiast 0.
+    Bez tolerancji mute-at-zero nigdy się nie aktywował na realnym sprzęcie.
+    """
+
+    def test_near_zero_adc_still_mutes(self, qapp, bus):
+        """ADC 60 (~1.5%) < 3.5% tolerancji = realny end-stop → musi mute'ować."""
+        audio = MagicMock()
+        disp = PotDispatcher(bus, audio, settings=_settings())
+        disp.set_profile(_profile_with_pot(action=PotAction.SYSTEM_VOLUME,
+                                           mute_at_zero=True))
+        bus.pot_event.emit(0, 60)
+        audio.set_mute.assert_called_once_with(True, target=None)
+
+    def test_exact_adc0_mutes(self, qapp, bus):
+        audio = MagicMock()
+        disp = PotDispatcher(bus, audio, settings=_settings())
+        disp.set_profile(_profile_with_pot(action=PotAction.SYSTEM_VOLUME,
+                                           mute_at_zero=True))
+        bus.pot_event.emit(0, 0)
+        audio.set_mute.assert_called_once_with(True, target=None)
+
+    def test_just_above_tolerance_no_mute(self, qapp, bus):
+        """ADC 160 (~3.9%) > 3.5% tolerancji → unmute + głośność, bez mute."""
+        audio = MagicMock()
+        disp = PotDispatcher(bus, audio, settings=_settings())
+        disp.set_profile(_profile_with_pot(action=PotAction.SYSTEM_VOLUME,
+                                           mute_at_zero=True))
+        bus.pot_event.emit(0, 160)
+        audio.set_mute.assert_called_once_with(False, target=None)
+        audio.set_volume.assert_called_once()
+
+    def test_boundary_adc143_mutes(self, qapp, bus):
+        """ADC 143 = 0.0349 == 3.5% tolerancji → jeszcze mute'uje."""
+        audio = MagicMock()
+        disp = PotDispatcher(bus, audio, settings=_settings())
+        disp.set_profile(_profile_with_pot(action=PotAction.SYSTEM_VOLUME,
+                                           mute_at_zero=True))
+        bus.pot_event.emit(0, 143)
+        audio.set_mute.assert_called_once_with(True, target=None)
+
+    def test_boundary_adc144_no_mute(self, qapp, bus):
+        """ADC 144 = 0.0352 > 3.5% tolerancji → unmute + głośność."""
+        audio = MagicMock()
+        disp = PotDispatcher(bus, audio, settings=_settings())
+        disp.set_profile(_profile_with_pot(action=PotAction.SYSTEM_VOLUME,
+                                           mute_at_zero=True))
+        bus.pot_event.emit(0, 144)
+        audio.set_mute.assert_called_once_with(False, target=None)
+        audio.set_volume.assert_called_once()
+
+    def test_inverted_near_max_adc_mutes(self, qapp, bus):
+        """Odwrócony pot: efektywne zero na ADC 4095; realny pot stopuje na
+        ~4040 (98.6%) — w tolerancji 3.5% → musi mute'ować."""
+        audio = MagicMock()
+        disp = PotDispatcher(bus, audio, settings=_settings())
+        disp.set_profile(_profile_with_pot(action=PotAction.SYSTEM_VOLUME,
+                                           invert=True, mute_at_zero=True))
+        bus.pot_event.emit(0, 4040)
+        audio.set_mute.assert_called_once_with(True, target=None)
+
+    def test_global_invert_near_max_adc_mutes(self, qapp, bus):
+        audio = MagicMock()
+        disp = PotDispatcher(bus, audio,
+                             settings=_settings(invert_all_pots=True))
+        disp.set_profile(_profile_with_pot(action=PotAction.SYSTEM_VOLUME,
+                                           mute_at_zero=True))
+        bus.pot_event.emit(0, 4040)
+        audio.set_mute.assert_called_once_with(True, target=None)
+
+    def test_mid_position_never_mutes(self, qapp, bus):
+        """Środek skali → unmute + normalna głośność (nigdy set_mute(True))."""
+        audio = MagicMock()
+        disp = PotDispatcher(bus, audio, settings=_settings())
+        disp.set_profile(_profile_with_pot(action=PotAction.SYSTEM_VOLUME,
+                                           mute_at_zero=True))
+        bus.pot_event.emit(0, 2048)
+        audio.set_mute.assert_called_once_with(False, target=None)
+
+    def test_tolerance_constant_value(self):
+        """Tolerancja 3.5% ≈ 143 ADC — pokrywa najgorszy raportowany
+        przypadek (pot stający na 97% przy max), a nie zjada górnych 3.5%+
+        regulacji, gdzie i tak głośność jest praktycznie niesłyszalna."""
+        from simple_deck.core.pot_dispatcher import ZERO_POSITION_TOLERANCE
+        assert 0.03 <= ZERO_POSITION_TOLERANCE <= 0.05
+        assert int(ZERO_POSITION_TOLERANCE * 4095) == 143

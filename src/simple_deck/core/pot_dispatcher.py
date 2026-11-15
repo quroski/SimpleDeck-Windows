@@ -34,6 +34,15 @@ MAX_HZ = 30.0
 MIN_INTERVAL_S = 1.0 / MAX_HZ
 ADC_MAX = 4095.0
 
+# V1.1.2: Tolerancja pozycji zerowej dla mute-at-zero (jako ułamek skali ADC).
+# Tanie potencjometry (end-stop tolerancja ±1-3%, szum ADC, filtr EMA osiadający
+# ~1-2% poniżej surowego max) NIGDY nie raportują dokładnie 0 ani 4095.
+# Logi usera: poty stają na 97-99% przy max (po invert to efektywne zero),
+# analogicznie min daje ADC ~60-140 zamiast 0. Bez tolerancji mute nigdy się
+# nie aktywował. 3.5% z 4095 ≈ 143 ADC — pokrywa najgorszy raportowany
+# przypadek (97%) z zapasem; dolne 3.5% skali i tak to praktycznie cisza.
+ZERO_POSITION_TOLERANCE = 0.035
+
 
 def _apply_curve(norm: float, curve: str) -> float:
     """Krzywa odpowiedzi dla znormalizowanej wartości 0..1.
@@ -219,12 +228,18 @@ class PotDispatcher(QObject):
         global ⊕ per-pot invert), więc odwrócony potencjometr ma swoje
         efektywne zero na ADC 4095, a nieodwrócony na ADC 0. Pozycja zerowa
         to pozycja gałki, NIE wyliczona głośność (min_volume > 0 nadal mutuje).
+
+        V1.1.2: tolerancja ZERO_POSITION_TOLERANCE (±3.5% skali) — realny pot
+        na end-stopie raportuje ADC ~60..140 (nie dokładnie 0), bo szum + filtr
+        EMA + tolerancja fabryczna tracka. Bez tego mute-at-zero nigdy nie
+        aktywował się na sprzęcie użytkownika (poty stają na 97-99% przy max,
+        analogicznie ~1-3% przy min).
         """
         norm = max(0, min(int(adc), 4095)) / ADC_MAX
         global_invert = bool(getattr(self._settings, "invert_all_pots", False))
         if bool(getattr(cfg, "invert", False)) ^ global_invert:
             norm = 1.0 - norm
-        return norm <= 0.0
+        return norm <= ZERO_POSITION_TOLERANCE
 
     def _get_foreground_proc(self) -> str:
         """Zwraca nazwę procesu aktywnej aplikacji (cached, TTL 1 s)."""
