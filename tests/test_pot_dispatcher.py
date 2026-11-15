@@ -246,14 +246,16 @@ class TestPotValueCache:
 
 
 class TestMuteAtZero:
-    """V7: Wyciszanie przy pozycji 0% (po odwróceniu kierunku).
+    """V1.1.3: Wyciszanie przy zerowej głośności (≤1% wyliczonej głośności).
 
-    Semantyka "mute only": na pozycji zerowej → set_mute(True), wartość
-    głośności nietknięta. Poza zerem → set_mute(False) + set_volume.
+    Semantyka "mute only": głośność w progu 0-1% → set_mute(True), wartość
+    głośności nietknięta. Powyżej progu → set_mute(False) + set_volume.
+    Decyzja oceniana na WYliczonej głośności (po invert → krzywa → min/max →
+    sensitivity), nie na pozycji gałki ADC.
     Global toggle LUB per-pot checkbox włączają funkcję (OR).
     """
 
-    def test_zero_position_mutes_system_volume(self, qapp, bus):
+    def test_zero_volume_mutes_system_volume(self, qapp, bus):
         audio = MagicMock()
         disp = PotDispatcher(bus, audio, settings=_settings())
         disp.set_profile(_profile_with_pot(action=PotAction.SYSTEM_VOLUME,
@@ -372,14 +374,17 @@ class TestMuteAtZero:
         audio.set_mute.assert_not_called()
         audio.set_volume.assert_not_called()
 
-    def test_min_volume_gt_zero_still_mutes(self, qapp, bus):
-        """Mute zależy od POZYCJI gałki, nie wyliczonej głośności."""
+    def test_min_volume_above_threshold_never_mutes(self, qapp, bus):
+        """min_volume > progu (1%): pot nigdy nie osiągnie ≤1% → mute nie
+        aktywuje się (świadomy trade-off decyzji opartej na głośności)."""
         audio = MagicMock()
         disp = PotDispatcher(bus, audio, settings=_settings())
         disp.set_profile(_profile_with_pot(action=PotAction.SYSTEM_VOLUME,
                                            min_volume=0.2, mute_at_zero=True))
-        bus.pot_event.emit(0, 0)   # gałka na 0, ale vol=0.2
-        audio.set_mute.assert_called_once_with(True, target=None)
+        bus.pot_event.emit(0, 0)   # gałka na 0, ale vol=0.2 (20%)
+        audio.set_mute.assert_called_once_with(False, target=None)
+        audio.set_volume.assert_called_once()
+        assert audio.set_volume.call_args[0][0] == 0.2
 
     def test_sync_from_cache_restores_mute(self, qapp, bus):
         """Przy starcie: pot zapamiętany na 0% → cel pozostaje wyciszony."""
@@ -401,34 +406,49 @@ class TestMuteAtZero:
         audio.set_mute.assert_not_called()
 
 
-class TestZeroPositionTolerance:
-    """V1.1.2: Tolerancja pozycji zerowej (3.5% skali ≈ 143 ADC).
+class TestZeroVolumeThreshold:
+    """V1.1.3: Próg zerowej głośności (1%).
 
-    Bug z backendu: realne potencjometry NIGDY nie raportują dokładnie ADC 0
-    (end-stop tolerancja ±1-3%, szum ADC, filtr EMA). User raportował poty
-    stające na 97-99% przy max — analogicznie min daje ADC ~60-140 zamiast 0.
-    Bez tolerancji mute-at-zero nigdy się nie aktywował na realnym sprzęcie.
+    Mute aktywuje się gdy WYliczona głośność (po invert → krzywa → min/max →
+    sensitivity) zaokrąglona do pełnych procentów wynosi ≤1% — czyli gdy
+    wyświetlana głośność to 0 lub 1. Decyzja niezależna od hardware
+    potencjometru (szum ADC / tolerancja end-stopów kompensowane przez
+    pipeline mapowania). Liniowa krzywa: próg 1% = ADC ~61 (61/4095 ≈ 1.49%
+    → zaokrągla do 1 → mute; ADC 62 ≈ 1.51% → 2 → brak mute).
     """
 
-    def test_near_zero_adc_still_mutes(self, qapp, bus):
-        """ADC 60 (~1.5%) < 3.5% tolerancji = realny end-stop → musi mute'ować."""
-        audio = MagicMock()
-        disp = PotDispatcher(bus, audio, settings=_settings())
-        disp.set_profile(_profile_with_pot(action=PotAction.SYSTEM_VOLUME,
-                                           mute_at_zero=True))
-        bus.pot_event.emit(0, 60)
-        audio.set_mute.assert_called_once_with(True, target=None)
-
     def test_exact_adc0_mutes(self, qapp, bus):
+        """ADC 0 → głośność 0% → set_mute(True), głośność nietknięta."""
         audio = MagicMock()
         disp = PotDispatcher(bus, audio, settings=_settings())
         disp.set_profile(_profile_with_pot(action=PotAction.SYSTEM_VOLUME,
                                            mute_at_zero=True))
         bus.pot_event.emit(0, 0)
         audio.set_mute.assert_called_once_with(True, target=None)
+        audio.set_volume.assert_not_called()
 
-    def test_just_above_tolerance_no_mute(self, qapp, bus):
-        """ADC 160 (~3.9%) > 3.5% tolerancji → unmute + głośność, bez mute."""
+    def test_boundary_adc61_mutes(self, qapp, bus):
+        """ADC 61 = 1.49% wyliczonej głośności → zaokrągla do 1% → mute."""
+        audio = MagicMock()
+        disp = PotDispatcher(bus, audio, settings=_settings())
+        disp.set_profile(_profile_with_pot(action=PotAction.SYSTEM_VOLUME,
+                                           mute_at_zero=True))
+        bus.pot_event.emit(0, 61)
+        audio.set_mute.assert_called_once_with(True, target=None)
+        audio.set_volume.assert_not_called()
+
+    def test_boundary_adc62_no_mute(self, qapp, bus):
+        """ADC 62 = 1.51% → zaokrągla do 2% → poza progiem: unmute + głośność."""
+        audio = MagicMock()
+        disp = PotDispatcher(bus, audio, settings=_settings())
+        disp.set_profile(_profile_with_pot(action=PotAction.SYSTEM_VOLUME,
+                                           mute_at_zero=True))
+        bus.pot_event.emit(0, 62)
+        audio.set_mute.assert_called_once_with(False, target=None)
+        audio.set_volume.assert_called_once()
+
+    def test_above_threshold_unmutes_and_sets_volume(self, qapp, bus):
+        """ADC 160 (~3.9%) → poza progiem: unmute + normalna głośność."""
         audio = MagicMock()
         disp = PotDispatcher(bus, audio, settings=_settings())
         disp.set_profile(_profile_with_pot(action=PotAction.SYSTEM_VOLUME,
@@ -437,45 +457,59 @@ class TestZeroPositionTolerance:
         audio.set_mute.assert_called_once_with(False, target=None)
         audio.set_volume.assert_called_once()
 
-    def test_boundary_adc143_mutes(self, qapp, bus):
-        """ADC 143 = 0.0349 == 3.5% tolerancji → jeszcze mute'uje."""
+    def test_exp_curve_low_adc_still_mutes(self, qapp, bus):
+        """Krzywa exp (n²): ADC 100 → vol ≈ (100/4095)² ≈ 0.06% → mute,
+        mimo że surowa pozycja (~2.4%) byłaby poza liniowym progiem."""
         audio = MagicMock()
         disp = PotDispatcher(bus, audio, settings=_settings())
         disp.set_profile(_profile_with_pot(action=PotAction.SYSTEM_VOLUME,
-                                           mute_at_zero=True))
-        bus.pot_event.emit(0, 143)
+                                           curve="exp", mute_at_zero=True))
+        bus.pot_event.emit(0, 100)
         audio.set_mute.assert_called_once_with(True, target=None)
+        audio.set_volume.assert_not_called()
 
-    def test_boundary_adc144_no_mute(self, qapp, bus):
-        """ADC 144 = 0.0352 > 3.5% tolerancji → unmute + głośność."""
+    def test_min_volume_above_threshold_never_mutes(self, qapp, bus):
+        """min_volume 20% > progu: pot nigdy nie spadnie do ≤1% → brak mute
+        (odciszenie + set_volume na 20%, nigdy set_mute(True))."""
         audio = MagicMock()
         disp = PotDispatcher(bus, audio, settings=_settings())
         disp.set_profile(_profile_with_pot(action=PotAction.SYSTEM_VOLUME,
-                                           mute_at_zero=True))
-        bus.pot_event.emit(0, 144)
+                                           min_volume=0.2, mute_at_zero=True))
+        bus.pot_event.emit(0, 0)
         audio.set_mute.assert_called_once_with(False, target=None)
-        audio.set_volume.assert_called_once()
+        audio.set_volume.assert_called_once_with(0.2, target=None)
 
-    def test_inverted_near_max_adc_mutes(self, qapp, bus):
-        """Odwrócony pot: efektywne zero na ADC 4095; realny pot stopuje na
-        ~4040 (98.6%) — w tolerancji 3.5% → musi mute'ować."""
+    def test_inverted_pot_above_threshold_no_mute(self, qapp, bus):
+        """Odwrócony pot: mute oceniany na wyliczonej głośności — ADC 61
+        po odwróceniu = 98.5% głośności → poza progiem (nie mutuje)."""
         audio = MagicMock()
         disp = PotDispatcher(bus, audio, settings=_settings())
         disp.set_profile(_profile_with_pot(action=PotAction.SYSTEM_VOLUME,
                                            invert=True, mute_at_zero=True))
-        bus.pot_event.emit(0, 4040)
-        audio.set_mute.assert_called_once_with(True, target=None)
+        bus.pot_event.emit(0, 61)
+        audio.set_mute.assert_called_once_with(False, target=None)
+        audio.set_volume.assert_called_once()
 
-    def test_global_invert_near_max_adc_mutes(self, qapp, bus):
+    def test_inverted_pot_mutes_at_real_max(self, qapp, bus):
+        """Odwrócony pot: ADC 4095 → wyliczona głośność 0% → mute."""
+        audio = MagicMock()
+        disp = PotDispatcher(bus, audio, settings=_settings())
+        disp.set_profile(_profile_with_pot(action=PotAction.SYSTEM_VOLUME,
+                                           invert=True, mute_at_zero=True))
+        bus.pot_event.emit(0, 4095)
+        audio.set_mute.assert_called_once_with(True, target=None)
+        audio.set_volume.assert_not_called()
+
+    def test_global_invert_mutes_at_real_max(self, qapp, bus):
         audio = MagicMock()
         disp = PotDispatcher(bus, audio,
                              settings=_settings(invert_all_pots=True))
         disp.set_profile(_profile_with_pot(action=PotAction.SYSTEM_VOLUME,
                                            mute_at_zero=True))
-        bus.pot_event.emit(0, 4040)
+        bus.pot_event.emit(0, 4095)
         audio.set_mute.assert_called_once_with(True, target=None)
 
-    def test_mid_position_never_mutes(self, qapp, bus):
+    def test_mid_volume_never_mutes(self, qapp, bus):
         """Środek skali → unmute + normalna głośność (nigdy set_mute(True))."""
         audio = MagicMock()
         disp = PotDispatcher(bus, audio, settings=_settings())
@@ -483,11 +517,9 @@ class TestZeroPositionTolerance:
                                            mute_at_zero=True))
         bus.pot_event.emit(0, 2048)
         audio.set_mute.assert_called_once_with(False, target=None)
+        audio.set_volume.assert_called_once()
 
-    def test_tolerance_constant_value(self):
-        """Tolerancja 3.5% ≈ 143 ADC — pokrywa najgorszy raportowany
-        przypadek (pot stający na 97% przy max), a nie zjada górnych 3.5%+
-        regulacji, gdzie i tak głośność jest praktycznie niesłyszalna."""
-        from simple_deck.core.pot_dispatcher import ZERO_POSITION_TOLERANCE
-        assert 0.03 <= ZERO_POSITION_TOLERANCE <= 0.05
-        assert int(ZERO_POSITION_TOLERANCE * 4095) == 143
+    def test_threshold_constant_value(self):
+        """Próg 1% — mute gdy wyświetlana głośność to 0 lub 1."""
+        from simple_deck.core.pot_dispatcher import ZERO_VOLUME_THRESHOLD
+        assert ZERO_VOLUME_THRESHOLD == 0.01

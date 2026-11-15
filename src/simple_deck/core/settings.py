@@ -95,8 +95,9 @@ class Settings:
     recent_apps: list[str] = field(default_factory=list)
     # Globalne odwrócenie kierunku wszystkich potencjometrów (hw wiring fix)
     invert_all_pots: bool = False
-    # Globalne wyciszanie przy pozycji 0%: pot w pozycji zerowej (po odwróceniu)
-    # ustawia mute danego celu. Łączy się LUB z per-pot PotConfig.mute_at_zero.
+    # Globalne wyciszanie przy zerowej głośności: gdy wyliczona głośność pota
+    # osiągnie 0-1%, ustawia mute danego celu. Łączy się LUB z per-pot
+    # PotConfig.mute_at_zero.
     mute_at_zero_all_pots: bool = False
     # Ostatnie znane wartości potencjometrów (cache dla UI przy starcie)
     # 5 wartości ADC 0..4095; -1 = nieznane (zostanie nadpisane przez POT_EVT)

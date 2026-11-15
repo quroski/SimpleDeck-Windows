@@ -727,14 +727,15 @@ class SettingsPage(QWidget):
         cb.setChecked(bool(getattr(self._settings, "invert_all_pots", False)))
         cb.toggled.connect(self._on_pot_invert_toggled)
         cl.addWidget(cb)
-        # V7: globalne wyciszanie przy pozycji 0% (łączy się LUB z per-pot
-        # 'Wycisz przy pozycji 0%' w ustawieniach zaawansowanych pota).
+        # V1.1.3: globalne wyciszanie przy zerowej głośności (łączy się LUB z
+        # per-pot 'Wycisz przy zerowej głośności' w ustawieniach zaawansowanych
+        # pota). Decyzja na wyliczonej głośności, nie pozycji gałki.
         cl.addWidget(QLabel(
-            "Wyciszanie przy pozycji 0%: pot w pozycji zerowej (po uwzględnieniu "
-            "odwrócenia kierunku) wycisza cel, którego głośność reguluje. "
-            "Ruch z zera odcisza i przywraca głośność z pota.",
+            "Wyciszanie przy zerowej głośności: gdy wyliczona głośność pota "
+            "(po krzywej i zakresie min/max) osiągnie 0-1%, cel jest wyciszany. "
+            "Ruch gałką powyżej progu odcisza i przywraca głośność z pota.",
             objectName="sectionSubtitle"))
-        self._mute_zero_cb = QCheckBox("Wycisz przy 0% (wszystkie potencjometry)")
+        self._mute_zero_cb = QCheckBox("Wycisz przy głośności 0-1% (wszystkie potencjometry)")
         self._mute_zero_cb.setChecked(
             bool(getattr(self._settings, "mute_at_zero_all_pots", False)))
         self._mute_zero_cb.toggled.connect(self._on_mute_zero_toggled)
@@ -751,12 +752,12 @@ class SettingsPage(QWidget):
                      else "Globalne odwrócenie potencjometrów: wyłączone")
 
     def _on_mute_zero_toggled(self, checked: bool) -> None:
-        """V7: globalny mute przy 0% — zapis + potwierdzenie."""
+        """V1.1.3: globalny mute przy zerowej głośności — zapis + potwierdzenie."""
         self._settings.mute_at_zero_all_pots = bool(checked)
         self._save_settings()
         self._notify("info",
-                     "Wyciszanie przy 0%: WŁĄCZONE" if checked
-                     else "Wyciszanie przy 0%: wyłączone")
+                     "Wyciszanie przy głośności 0-1%: WŁĄCZONE" if checked
+                     else "Wyciszanie przy głośności 0-1%: wyłączone")
 
     def _card_auto_switch(self) -> QFrame:
         card, cl = self._card("Auto-przełączanie profili", "branch")

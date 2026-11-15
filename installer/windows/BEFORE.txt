@@ -5,7 +5,7 @@ Simple Deck to aplikacja kontrolna dla urządzenia GREJEM Stream Deck
 
 Funkcje:
   - Kontrola głośności systemowej, per-aplikacji i w grach (WASAPI)
-  - Wyciszanie przy pozycji 0% potencjometru (globalnie lub dla każdego osobno)
+  - Wyciszanie przy głośności 0-1% potencjometru (globalnie lub dla każdego osobno)
   - Odwracanie kierunku potencjometrów (globalnie lub każdy osobno)
   - Skróty klawiszowe, w tym klawisze funkcyjne F13-F24
   - Akcje przycisków: toggle-mute, wklejanie tekstu, uruchamianie komend

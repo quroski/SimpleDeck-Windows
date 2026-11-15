@@ -79,9 +79,11 @@ class PotConfig:
     min_volume: float = 0.0     # dolna granica mapowania (0..1)
     max_volume: float = 1.0     # górna granica mapowania (0..1)
     invert: bool = False        # odwróć kierunek
-    # V7: wycisz cel (OS mute flag) gdy pot jest w pozycji zerowej — oceniane
-    # PO odwróceniu kierunku (invert/invert_all), więc odwrócony pot mutuje
-    # na swoim efektywnym zerze. Łączy się LUB z mute_at_zero_all_pots.
+    # V7: wycisz cel (OS mute flag) gdy wyliczona głośność pota osiągnie
+    # 0-1% — oceniane PO pełnym pipeline mapowania (invert → krzywa →
+    # min/max → sensitivity), więc decyzja zależy od głośności trafiającej
+    # do systemu audio, nie od hardware potencjometru.
+    # Łączy się LUB z mute_at_zero_all_pots.
     mute_at_zero: bool = False
 
 
@@ -216,7 +218,7 @@ class Profile:
             min_volume=max(0.0, min(1.0, float(p.get("min_volume", 0.0)))),
             max_volume=max(0.0, min(1.0, float(p.get("max_volume", 1.0)))),
             invert=bool(p.get("invert", False)),
-            # V7: wycisz przy 0% (stare profile schema<7 → False).
+            # V7: wycisz przy zerowej głośności (stare profile schema<7 → False).
             mute_at_zero=bool(p.get("mute_at_zero", False)),
         ) for i, p in enumerate(d.get("pots", []))]
         buttons = [ButtonConfig(

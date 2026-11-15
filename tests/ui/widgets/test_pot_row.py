@@ -68,7 +68,7 @@ class TestPotRowReorder:
 
 
 class TestPotRowMuteAtZero:
-    """V7: Checkbox 'Wycisz przy pozycji 0%' — stan + persistencja w configu."""
+    """V7: Checkbox 'Wycisz przy głośności 0-1%' — stan + persistencja w configu."""
 
     def test_checkbox_reflects_config(self, qapp):
         row = PotRow(PotConfig(idx=0, mute_at_zero=True))

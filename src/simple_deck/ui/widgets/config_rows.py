@@ -304,10 +304,10 @@ class PotRow(_ConfigRow):
         self._invert.toggled.connect(lambda *_: self._on_changed())
         adv_l.addWidget(self._invert)
 
-        # V7: Wycisz przy pozycji 0% — łączy się LUB z globalnym
-        # mute_at_zero_all_pots (Ustawienia → Sterowanie). Ocena pozycji
-        # następuje PO odwróceniu kierunku.
-        self._mute_at_zero = QCheckBox("Wycisz przy pozycji 0%")
+        # V1.1.3: Wycisz przy zerowej głośności — łączy się LUB z globalnym
+        # mute_at_zero_all_pots (Ustawienia → Sterowanie). Ocena następuje
+        # na wyliczonej głośności (≤1%), nie na pozycji gałki.
+        self._mute_at_zero = QCheckBox("Wycisz przy głośności 0-1%")
         self._mute_at_zero.setChecked(bool(getattr(config, "mute_at_zero", False)))
         self._mute_at_zero.toggled.connect(lambda *_: self._on_changed())
         adv_l.addWidget(self._mute_at_zero)

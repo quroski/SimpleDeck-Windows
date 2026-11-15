@@ -12,7 +12,7 @@
 
 #define MyAppName           "Simple Deck"
 #ifndef MyAppVersion
-  #define MyAppVersion      "1.1.2a"
+  #define MyAppVersion      "1.1.3a"
 #endif
 #define MyAppPublisher      "GREJEM INDUSTRIES"
 #define MyAppURL            "https://github.com/quroski/SimpleDeck-Windows"

@@ -7,7 +7,7 @@ Następne kroki:
      przy instalacji i uruchom ze skrótu)
   3. Status "● Połączony" w prawym górnym rogu oznacza połączenie z MCU
   4. Skonfiguruj potencjometry i przyciski na kartach "Potencjometry"
-     i "Przyciski" (nazwy, kierunek, wyciszanie przy 0%, skróty)
+     i "Przyciski" (nazwy, kierunek, wyciszanie przy głośności 0-1%, skróty)
 
 Wskazówki:
   - Autostart z systemem włączysz w Ustawienia -> System

@@ -34,14 +34,14 @@ MAX_HZ = 30.0
 MIN_INTERVAL_S = 1.0 / MAX_HZ
 ADC_MAX = 4095.0
 
-# V1.1.2: Tolerancja pozycji zerowej dla mute-at-zero (jako ułamek skali ADC).
-# Tanie potencjometry (end-stop tolerancja ±1-3%, szum ADC, filtr EMA osiadający
-# ~1-2% poniżej surowego max) NIGDY nie raportują dokładnie 0 ani 4095.
-# Logi usera: poty stają na 97-99% przy max (po invert to efektywne zero),
-# analogicznie min daje ADC ~60-140 zamiast 0. Bez tolerancji mute nigdy się
-# nie aktywował. 3.5% z 4095 ≈ 143 ADC — pokrywa najgorszy raportowany
-# przypadek (97%) z zapasem; dolne 3.5% skali i tak to praktycznie cisza.
-ZERO_POSITION_TOLERANCE = 0.035
+# V1.1.3: Próg głośności zerowej dla mute-at-zero (ułamek 0..1).
+# Decyzja mute jest oceniana na WYliczonej głośności (po invert → krzywa →
+# min/max → sensitivity), a nie na pozycji gałki ADC — dzięki temu jest
+# niezależna od hardware potencjometru (szum ADC, tolerancja end-stopów
+# i krzywa są już uwzględnione w pipeline głośności). Głośność zaokrąglona
+# do pełnych procentów ≤1% (wyświetlane 0 lub 1) → wycisz cel.
+# Uwaga: pot z min_volume > progu nigdy nie osiągnie ≤1% → nie mutuje.
+ZERO_VOLUME_THRESHOLD = 0.01
 
 
 def _apply_curve(norm: float, curve: str) -> float:
@@ -79,7 +79,7 @@ class PotDispatcher(QObject):
         self._window_backend = window_backend
         self._profile: Optional[Profile] = None
 
-        # Koalescencja: idx -> (głośność, czy pozycja zerowa) — jeszcze niewysłane
+        # Koalescencja: idx -> (głośność, czy w progu zerowym) — jeszcze niewysłane
         self._pending: dict[int, tuple[float, bool]] = {}
         self._last_flush = 0.0
         # Pojedynczy timer koalescujący - flush'uje pending po MIN_INTERVAL_S
@@ -129,9 +129,9 @@ class PotDispatcher(QObject):
             target = cfg.target if cfg.action == PotAction.APP_VOLUME else None
             try:
                 self._audio.set_volume(vol, target=target)
-                # V7: przywróć stan mute zgodny z zapamiętaną pozycją pota
-                # (np. user zostawił pot na 0% → cel pozostaje wyciszony).
-                if self._mute_enabled(cfg) and self._is_zero_position(cfg, cached[idx]):
+                # V1.1.3: przywróć stan mute zgodny z zapamiętaną głośnością
+                # (np. user zostawił pot na 0-1% → cel pozostaje wyciszony).
+                if self._mute_enabled(cfg) and self._is_zero_volume(vol):
                     self._audio.set_mute(True, target=target)
             except Exception:
                 log.debug("sync volume failed for pot %d", idx)
@@ -177,7 +177,7 @@ class PotDispatcher(QObject):
         if self._audio is None or not is_volume:
             return
 
-        self._pending[idx] = (level, self._is_zero_position(cfg, adc))
+        self._pending[idx] = (level, self._is_zero_volume(level))
         now = time.monotonic()
         if now - self._last_flush >= MIN_INTERVAL_S:
             # Możemy wysłać natychmiast
@@ -213,7 +213,7 @@ class PotDispatcher(QObject):
         return max(0.0, min(1.0, vol))
 
     def _mute_enabled(self, cfg) -> bool:
-        """V7: czy mute-przy-0% jest aktywny dla tego pota.
+        """V7: czy mute-przy-zerowej-głośności jest aktywny dla tego pota.
 
         Globalny ``mute_at_zero_all_pots`` LUB per-pot ``mute_at_zero`` —
         wystarczy jedno (user: "only one must allow").
@@ -221,25 +221,18 @@ class PotDispatcher(QObject):
         return (bool(getattr(self._settings, "mute_at_zero_all_pots", False))
                 or bool(getattr(cfg, "mute_at_zero", False)))
 
-    def _is_zero_position(self, cfg, adc: int) -> bool:
-        """V7: czy pot jest w pozycji zerowej — oceniane PO odwróceniu kierunku.
+    def _is_zero_volume(self, vol: float) -> bool:
+        """V1.1.3: czy wyliczona głośność jest w progu zerowym (≤1%).
 
-        To ta sama normalizacja co w ``_map_volume``/``_raw_level`` (XOR
-        global ⊕ per-pot invert), więc odwrócony potencjometr ma swoje
-        efektywne zero na ADC 4095, a nieodwrócony na ADC 0. Pozycja zerowa
-        to pozycja gałki, NIE wyliczona głośność (min_volume > 0 nadal mutuje).
+        Ocena na głośności PO pełnym pipeline mapowania (invert → krzywa →
+        min/max → sensitivity) — decyzja zależy od tego, co trafia do systemu
+        audio, nie od hardware potencjometru. Zaokrąglenie do pełnych
+        procentów: mute gdy wyświetlana głośność to 0 lub 1.
 
-        V1.1.2: tolerancja ZERO_POSITION_TOLERANCE (±3.5% skali) — realny pot
-        na end-stopie raportuje ADC ~60..140 (nie dokładnie 0), bo szum + filtr
-        EMA + tolerancja fabryczna tracka. Bez tego mute-at-zero nigdy nie
-        aktywował się na sprzęcie użytkownika (poty stają na 97-99% przy max,
-        analogicznie ~1-3% przy min).
+        Uwaga: pot z min_volume powyżej progu nigdy nie osiągnie ≤1%,
+        więc dla takiego pota mute nigdy się nie aktywuje (świadomy trade-off).
         """
-        norm = max(0, min(int(adc), 4095)) / ADC_MAX
-        global_invert = bool(getattr(self._settings, "invert_all_pots", False))
-        if bool(getattr(cfg, "invert", False)) ^ global_invert:
-            norm = 1.0 - norm
-        return norm <= ZERO_POSITION_TOLERANCE
+        return round(vol * 100.0) <= 1
 
     def _get_foreground_proc(self) -> str:
         """Zwraca nazwę procesu aktywnej aplikacji (cached, TTL 1 s)."""
@@ -285,11 +278,11 @@ class PotDispatcher(QObject):
                             target = fg_proc
                         else:
                             continue  # brak gry → nic nie rób
-                    # V7: mute przy pozycji 0% — TYLKO gdy funkcja włączona
-                    # dla tego pota (nigdy nie ruszamy ręcznego mute'u usera
-                    # na potach bez tej opcji). Pozycja 0 → set_mute(True),
-                    # wartość głośności nietknięta; poza zerem → unmute +
-                    # normalna głośność.
+                    # V1.1.3: mute przy zerowej głośności (≤1%) — TYLKO gdy
+                    # funkcja włączona dla tego pota (nigdy nie ruszamy
+                    # ręcznego mute'u usera na potach bez tej opcji).
+                    # Głośność 0-1% → set_mute(True), wartość głośności
+                    # nietknięta; powyżej progu → unmute + normalna głośność.
                     if self._mute_enabled(cfg):
                         self._audio.set_mute(at_zero, target=target)
                         if at_zero:
