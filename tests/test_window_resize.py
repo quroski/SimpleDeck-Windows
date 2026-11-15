@@ -244,3 +244,62 @@ class TestPanelScaling:
                         f"page {i} min {page.minimumSizeHint().width()} > stack {stack_w}"
         finally:
             win.close()
+
+
+class TestVerticalScaling:
+    """Skalowanie pionowe: karty i komórki rosną razem z oknem.
+
+    Regresja: komórki DeckMap miały setFixedHeight (96/72) + pionową
+    politykę Fixed, a overview kończyło się addStretch() — powiększanie
+    okna tworzyło tylko martwą przestrzeń pod kartami zamiast powiększać
+    wizualizację.
+    """
+
+    def test_deck_map_and_cells_grow_with_window(self, qapp, bus, mock_connection):
+        win = MainWindow(bus=bus, connection=mock_connection, settings=Settings())
+        try:
+            win.show()
+            qapp.processEvents()
+
+            dm = win._page_overview._deck_map
+            win.resize(820, 520)
+            qapp.processEvents()
+            h_small = dm.height()
+            pot_small = dm._pots[0].height()
+            btn_small = dm._buttons[0].height()
+
+            win.resize(1280, 900)
+            qapp.processEvents()
+            h_big = dm.height()
+            pot_big = dm._pots[0].height()
+            btn_big = dm._buttons[0].height()
+
+            assert h_big > h_small
+            # Komórki rosną zamiast stać w miejscu przy martwej przestrzeni
+            assert pot_big > pot_small
+            assert btn_big > btn_small
+        finally:
+            win.close()
+
+    def test_cells_respect_minimums_at_min_window(self, qapp, bus, mock_connection):
+        """Przy minimalnym oknie komórki nie schodzą poniżej 96/72 px."""
+        win = MainWindow(bus=bus, connection=mock_connection, settings=Settings())
+        try:
+            win.show()
+            win.resize(820, 520)
+            qapp.processEvents()
+            dm = win._page_overview._deck_map
+            for cell in dm._pots:
+                assert cell.height() >= 96
+            for cell in dm._buttons:
+                assert cell.height() >= 72
+        finally:
+            win.close()
+
+    def test_window_min_height_not_raised_by_overview(self, qapp, bus, mock_connection):
+        """Overview jest w scrollu — nie podnosi minimum okna (520 ≤ 560)."""
+        win = MainWindow(bus=bus, connection=mock_connection, settings=Settings())
+        try:
+            assert win.minimumHeight() <= 560
+        finally:
+            win.close()

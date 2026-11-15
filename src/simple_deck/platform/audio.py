@@ -9,15 +9,54 @@ Każdy backend eksponuje:
   - set_volume(v, target=None)
   - toggle_mute(target=None)
   - get_mute(target=None)
+
+V9: sesje danego procesu są enumerowane po WSZYSTKICH aktywnych
+endpointach render (nie tylko domyślnym urządzeniu), z fallbackiem
+do AudioUtilities.GetAllSessions(). Aplikacja audio może mieć kilka
+sesji naraz (np. strumień główny + powiadomienia) — odczyt bierze
+pierwszą sesję, zapis/mute trafia do wszystkich; pary sesji są
+deduplikowane po (nazwa procesu, PID). list_apps() zwraca zdedupe
+listę znormalizowanych nazw procesów (bez końcówki ``.exe``),
+zgodną z dopasowaniem celu w _get_sessions i podpowiedziami AppPicker.
 """
 from __future__ import annotations
 
 import logging
 import sys
+import time
 from abc import ABC, abstractmethod
 from typing import Any, Optional
 
 log = logging.getLogger(__name__)
+
+try:  # pycaw/comtypes — dostępne tylko na Windows build
+    import comtypes
+    from ctypes import POINTER, cast
+    from pycaw.api.audiopolicy import IAudioSessionControl2, IAudioSessionManager2
+    from pycaw.api.endpointvolume import IAudioEndpointVolume, IAudioMeterInformation
+    from pycaw.constants import DEVICE_STATE, EDataFlow
+    from pycaw.pycaw import AudioSession as _AudioSession, AudioUtilities
+
+    PYCAW_AVAILABLE = True
+except ImportError:  # pragma: no cover - środowiska bez pycaw
+    PYCAW_AVAILABLE = False
+
+
+def normalize_proc_name(name: str) -> str:
+    """Znormalizuj nazwę procesu: trim, lowercase, bez końcówki ``.exe``.
+
+    Ten sam klucz jest używany przez dopasowanie sesji (_get_sessions),
+    dedupe list_apps i podpowiedzi AppPicker — dzięki temu ``spotify``,
+    ``Spotify.exe`` i ``SPOTIFY.EXE`` to jeden proces.
+    """
+    n = (name or "").strip().lower()
+    if n.endswith(".exe"):
+        n = n[: -len(".exe")].rstrip()
+    return n
+
+
+# Częstotliwość (sekundy) powtarzania ostrzeżenia "cel nie ma sesji" per target.
+_MISSING_WARN_INTERVAL_S = 30.0
 
 
 class AudioBackend(ABC):
@@ -125,55 +164,178 @@ class WindowsAudioBackend(AudioBackend):
         self._volume_ttl = 0.1  # 100ms cache for volume readings
         # Wybrane urządzenie wyjściowe (puste = domyślne systemowe)
         self._device_name: str = ""
+        # V9: throttle powtórzeń ostrzeżenia "cel nie ma sesji audio" per target
+        self._missing_warned_at: dict[str, float] = {}
 
     def set_output_device(self, name: str) -> None:
         """Ustaw urządzenie wyjściowe do sterowania głośnością systemową."""
         self._device_name = name or ""
 
     def list_apps(self) -> list[str]:
+        """Zdedupe lista znormalizowanych nazw procesów z aktywnymi sesjami.
+
+        V9: te same nazwy przechodzą przez normalize_proc_name, więc picker
+        i _get_sessions porównują spójny klucz (np. 'spotify' zamiast
+        raz 'spotify', raz 'Spotify.exe').
+        """
         try:
-            sessions = self._AudioUtilities.GetAllSessions()
-            return [s.Process.name() if s.Process else "unknown"
-                    for s in sessions if s.Process]
+            sessions = self._enumerate_all_sessions()
+            names = set()
+            for s in sessions:
+                proc = getattr(s, "Process", None)
+                if proc is None:
+                    continue
+                try:
+                    raw = proc.name()
+                except Exception:
+                    continue
+                norm = normalize_proc_name(raw)
+                if norm:
+                    names.add(norm)
+            return sorted(names)
         except Exception:
             log.exception("list_apps failed")
             return []
 
-    def _get_session(self, target: str):
-        """Zwraca sesję audio dla procesu `target` lub None.
+    def _device_friendly_name(self, dev) -> str:
+        """V9: czytelna nazwa endpointu (pycaw 20251023: AudioDevice.name nie istnieje)."""
+        try:
+            fn = dev.FriendlyName
+            if fn:
+                return str(fn)
+        except Exception:
+            pass
+        return str(dev)
 
-        Używa pycaw public API: AudioUtilities.GetSession(processname).
-        Zwraca obiekt AudioSession z `.SimpleAudioVolume' (public).
+    def _render_devices(self) -> list:
+        """V9: aktywne endpointy render (wszystkie urządzenia, nie tylko domyślne).
 
-        Cache TTL 5 s — eliminuje GetAllSessions() RPC na każdym set_volume
-        (pot wiggle 30 Hz → dawniej 30 RPC/s, teraz max 1 / 5 s).
+        Zwraca [] w razie błędu COM — callery muszą obsłużyć pustą listę.
+        """
+        try:
+            return list(self._AudioUtilities.GetAllDevices(
+                data_flow=EDataFlow.eRender.value,
+                device_state=DEVICE_STATE.ACTIVE.value,
+            ) or [])
+        except Exception:
+            log.exception("_render_devices failed")
+            return []
+
+    def _enumerate_all_sessions(self) -> list:
+        """Sesje audio po WSZYSTKICH aktywnych endpointach render, dedupe.
+
+        V9: aplikacja może odtwarzać audio na urządzeniu innym niż domyślne —
+        dawne AudioUtilities.GetAllSessions() widziało tylko domyślny endpoint.
+        Pary (znormalizowana nazwa, PID) deduplikowane first-wins (ten sam
+        proces na wielu urządzeniach = jeden wpis). W razie błędu COM albo
+        braku sesji po enumeracji ręcznej fallback do GetAllSessions().
+        """
+        seen: set[tuple[str, int]] = set()
+        out: list = []
+        try:
+            for dev in self._render_devices():
+                try:
+                    mgr = dev.AudioSessionManager
+                    enum = mgr.GetSessionEnumerator()
+                    if enum is None:
+                        continue
+                    count = enum.GetCount()
+                    for i in range(count):
+                        try:
+                            ctl = enum.GetSession(i)
+                            if ctl is None:
+                                continue
+                            ctl2 = ctl.QueryInterface(IAudioSessionControl2)
+                            session = _AudioSession(ctl2)
+                        except Exception:
+                            continue
+                        try:
+                            pid = int(session.ProcessId)
+                        except Exception:
+                            pid = 0
+                        try:
+                            raw = session.Process.name() if session.Process else ""
+                        except Exception:
+                            raw = ""
+                        key = (normalize_proc_name(raw), pid)
+                        if key in seen:
+                            continue
+                        seen.add(key)
+                        out.append(session)
+                except Exception:
+                    continue
+        except Exception:
+            pass
+        if out:
+            return out
+        # Fallback: sesje domyślnego endpointu (stara ścieżka / COM partial failure)
+        try:
+            sessions = self._AudioUtilities.GetAllSessions()
+            return list(sessions or [])
+        except Exception:
+            return []
+
+    def _get_sessions(self, target: str) -> list:
+        """Zwraca WSZYSTKIE sesje audio procesu `target` (V9) lub [].
+
+        Proces może mieć kilka sesji (strumień główny + dźwięki UI). Cache
+        TTL 10 s — enumeracja COM jest kosztowna, a poty wigglują do 30 Hz.
         """
         if not target:
-            return None
-        import time
-        target_l = target.lower()
+            return []
+        key = normalize_proc_name(target)
+        if not key:
+            return []
         now = time.monotonic()
-        cached = self._session_cache.get(target_l)
-        if cached is not None and (now - self._session_cache_at.get(target_l, 0.0)) < self._session_ttl:
+        cached = self._session_cache.get(key)
+        if cached is not None and (now - self._session_cache_at.get(key, 0.0)) < self._session_ttl:
             return cached
-        # GetSession filtruje case-insensitive po nazwie procesu
-        for s in self._AudioUtilities.GetAllSessions():
-            if s.Process and s.Process.name().lower() == target_l:
-                self._session_cache[target_l] = s
-                self._session_cache_at[target_l] = now
-                return s
+        sessions = [s for s in self._enumerate_all_sessions()
+                    if self._session_proc_name(s) == key]
+        if sessions:
+            self._session_cache[key] = sessions
+            self._session_cache_at[key] = now
+            return sessions
         # Miss — ewentualnie wygaś stary wpis
-        self._session_cache.pop(target_l, None)
-        self._session_cache_at.pop(target_l, None)
-        return None
+        self._session_cache.pop(key, None)
+        self._session_cache_at.pop(key, None)
+        return []
+
+    def _session_proc_name(self, session) -> str:
+        """Znormalizowana nazwa procesu sesji ('' gdy nie do ustalenia)."""
+        try:
+            proc = session.Process
+            if proc is None:
+                return ""
+            return normalize_proc_name(proc.name())
+        except Exception:
+            return ""
+
+    def _warn_missing_target(self, target: str) -> None:
+        """Ostrzegaj o braku sesji dla celu, max raz na 30 s per target (V9)."""
+        try:
+            key = normalize_proc_name(target)
+            now = time.monotonic()
+            last = self._missing_warned_at.get(key)
+            if last is not None and (now - last) < _MISSING_WARN_INTERVAL_S:
+                return
+            self._missing_warned_at[key] = now
+            log.warning("audio target '%s' nie ma aktywnych sesji audio", target)
+        except Exception:
+            pass
 
     def _get_master(self):
-        """Zwraca IAudioEndpointVolume dla wybranego (lub domyślnego) urządzenia."""
+        """Zwraca IAudioEndpointVolume dla wybranego (lub domyślnego) urządzenia.
+
+        V9: dopasowanie urządzenia po FriendlyName (pycaw 20251023 usunął
+        atrybuty DataFlow/.name z AudioDevice; enumeracja używa GetAllDevices
+        z filtrem eRender/ACTIVE, więc str DataFlow zniknął z warunków).
+        """
         if self._device_name:
-            for d in self._AudioUtilities.GetAllDevices():
-                if str(getattr(d, "DataFlow", "")).lower().startswith("render"):
-                    if d.name == self._device_name:
-                        return d.EndpointVolume
+            wanted = normalize_proc_name(self._device_name)
+            for d in self._render_devices():
+                if normalize_proc_name(self._device_friendly_name(d)) == wanted:
+                    return d.EndpointVolume
         devices = self._AudioUtilities.GetSpeakers()
         if devices is None:
             # Brak endpointu (rzadkie) — caller loguje i zwraca bezpieczną wartość.
@@ -184,7 +346,6 @@ class WindowsAudioBackend(AudioBackend):
         try:
             cache_key = target or "__system__"
             # V8: Check volume cache first (100ms TTL)
-            import time
             now = time.monotonic()
             if cache_key in self._volume_cache:
                 vol, ts = self._volume_cache[cache_key]
@@ -193,11 +354,12 @@ class WindowsAudioBackend(AudioBackend):
             
             # Fetch and cache
             if target:
-                s = self._get_session(target)
-                if s is None:
+                sessions = self._get_sessions(target)
+                if not sessions:
+                    self._warn_missing_target(target)
                     return 0.0
                 # Publiczne API: session.SimpleAudioVolume.GetMasterVolume()
-                vol = float(s.SimpleAudioVolume.GetMasterVolume())
+                vol = float(sessions[0].SimpleAudioVolume.GetMasterVolume())
             else:
                 master = self._get_master()
                 vol = float(master.GetMasterVolumeLevelScalar())
@@ -212,8 +374,12 @@ class WindowsAudioBackend(AudioBackend):
         value = max(0.0, min(1.0, value))
         try:
             if target:
-                s = self._get_session(target)
-                if s is not None:
+                sessions = self._get_sessions(target)
+                if not sessions:
+                    self._warn_missing_target(target)
+                    return
+                # V9: proces może mieć wiele sesji — ustaw głośność we wszystkich
+                for s in sessions:
                     s.SimpleAudioVolume.SetMasterVolume(value, None)
                 return
             master = self._get_master()
@@ -224,10 +390,18 @@ class WindowsAudioBackend(AudioBackend):
     def toggle_mute(self, target: Optional[str] = None) -> None:
         try:
             if target:
-                s = self._get_session(target)
-                if s is not None:
-                    cur = s.SimpleAudioVolume.GetMute()
-                    s.SimpleAudioVolume.SetMute(not cur, None)
+                sessions = self._get_sessions(target)
+                if not sessions:
+                    self._warn_missing_target(target)
+                    return
+                # V9: semantics "wycisz wszystko": gdy JAKAKOLWIEK sesja gra
+                # dźwięk (nie wyciszona), wycisz wszystkie; inaczej odmutuj.
+                any_unmuted = any(
+                    not bool(s.SimpleAudioVolume.GetMute()) for s in sessions
+                )
+                new_state = any_unmuted
+                for s in sessions:
+                    s.SimpleAudioVolume.SetMute(new_state, None)
                 return
             master = self._get_master()
             cur = master.GetMute()
@@ -241,11 +415,16 @@ class WindowsAudioBackend(AudioBackend):
         Nadpisuje ABC default (get+toggle) — bezpośrednie SetMute nie zależy
         od bieżącego stanu, więc nie ma race gdy użytkownik ręcznie zdmucha
         dźwięk między odczytem a przełączeniem.
+
+        V9: stan trafia do WSZYSTKICH sesji celu (strumień główny + dźwięki UI).
         """
         try:
             if target:
-                s = self._get_session(target)
-                if s is not None:
+                sessions = self._get_sessions(target)
+                if not sessions:
+                    self._warn_missing_target(target)
+                    return
+                for s in sessions:
                     s.SimpleAudioVolume.SetMute(bool(muted), None)
                 return
             master = self._get_master()
@@ -256,10 +435,13 @@ class WindowsAudioBackend(AudioBackend):
     def get_mute(self, target: Optional[str] = None) -> bool:
         try:
             if target:
-                s = self._get_session(target)
-                if s is None:
+                sessions = self._get_sessions(target)
+                if not sessions:
+                    self._warn_missing_target(target)
                     return False
-                return bool(s.SimpleAudioVolume.GetMute())
+                # V9: cel jest "wyciszony" gdy wszystkie sesje wyciszone?
+                # Semantyka UX: gdy JAKAKOLWIEK sesja gra dźwięk, odczyt mute=False.
+                return all(bool(s.SimpleAudioVolume.GetMute()) for s in sessions)
             master = self._get_master()
             return bool(master.GetMute())
         except Exception:
@@ -267,22 +449,30 @@ class WindowsAudioBackend(AudioBackend):
             return False
 
     def get_peak(self, target: Optional[str] = None) -> float:
-        """C10: VU metering przez IAudioMeterInformation (WASAPI)."""
+        """C10: VU metering przez IAudioMeterInformation (WASAPI).
+
+        V9: dla celu zwraca MAX poziom ze wszystkich sesji procesu — VU
+        nie gaśnie, gdy jedna z sesji (np. powiadomienia) gra w danej chwili.
+        """
         try:
-            from pycaw.pycaw import IAudioMeterInformation
             if target:
-                s = self._get_session(target)
-                if s is None:
+                sessions = self._get_sessions(target)
+                if not sessions:
                     return 0.0
-                meter = s._ctl.QueryInterface(IAudioMeterInformation)
-            else:
-                from ctypes import cast, POINTER
-                devices = self._AudioUtilities.GetSpeakers()
-                if devices is None:
-                    return 0.0
-                meter = devices._dev.Activate(IAudioMeterInformation._iid_,
-                                              self._CLSCTX_ALL, None)
-                meter = cast(meter, POINTER(IAudioMeterInformation))
+                peak = 0.0
+                for s in sessions:
+                    try:
+                        meter = s._ctl.QueryInterface(IAudioMeterInformation)
+                        peak = max(peak, float(getattr(meter, "GetPeakValue")()))
+                    except Exception:
+                        continue
+                return peak
+            devices = self._AudioUtilities.GetSpeakers()
+            if devices is None:
+                return 0.0
+            meter = devices._dev.Activate(IAudioMeterInformation._iid_,
+                                          self._CLSCTX_ALL, None)
+            meter = cast(meter, POINTER(IAudioMeterInformation))
             # Metody interfejsu COM generuje comtypes w runtime — getattr zamiast
             # bezpośredniego dostępu (statycznie niewidoczne).
             return float(getattr(meter, "GetPeakValue")())
@@ -290,15 +480,16 @@ class WindowsAudioBackend(AudioBackend):
             return 0.0
 
     def list_output_devices(self) -> list[tuple[str, str]]:
-        """Enumeracja endpointów odtwarzania przez pycaw. Best-effort."""
+        """Enumeracja endpointów odtwarzania przez pycaw. Best-effort.
+
+        V9: filtr eRender/ACTIVE na poziomie GetAllDevices + FriendlyName
+        (pycaw 20251023: AudioDevice nie ma już atrybutów DataFlow/.name).
+        """
         try:
-            devs = self._AudioUtilities.GetAllDevices()
             out = []
-            for d in devs:
-                # Tylko endpointy odtwarzania (Render), nie Capture
-                if str(getattr(d, "DataFlow", "")).lower().startswith("render"):
-                    name = getattr(d, "name", str(d))
-                    out.append((name, name))
+            for d in self._render_devices():
+                name = self._device_friendly_name(d)
+                out.append((name, name))
             return out
         except Exception:
             log.exception("list_output_devices failed")

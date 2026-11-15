@@ -63,13 +63,16 @@ class OverviewPage(QWidget):
         self._deck_map.pot_clicked.connect(self.pot_clicked)
         self._deck_map.button_clicked.connect(self.button_clicked)
         self._deck_map.label_renamed.connect(self.label_renamed)
-        lay.addWidget(self._deck_map)
+        # Skalowanie pionowe: DeckMap pochłania przyrost wysokości okna
+        # (pierwotnie wszystko było Fixed + końcowe addStretch tworzyło
+        # martwą przestrzeń pod kartami).
+        lay.addWidget(self._deck_map, 1)
 
         # Ostatnie zdarzenia - karta
         self._events_card = self._build_events_card()
         lay.addWidget(self._events_card)
 
-        lay.addStretch()
+        # Bez końcowego addStretch — DeckMap przejmuje nadmiar wysokości.
 
         # Outer layout
         outer = QVBoxLayout(self)

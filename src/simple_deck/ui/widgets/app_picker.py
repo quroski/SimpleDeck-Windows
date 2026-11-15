@@ -17,6 +17,7 @@ from PySide6.QtCore import Signal
 from PySide6.QtWidgets import QComboBox, QLabel, QVBoxLayout, QWidget
 
 from ...core.app_list_cache import get_app_list_cache
+from ...platform.audio import normalize_proc_name
 
 log = logging.getLogger(__name__)
 
@@ -124,14 +125,17 @@ class AppPicker(QWidget):
         dawniej każda zmiana tekstu / refresh picker'a powodowała dodatkowy
         RPC PulseAudio tutaj. Teraz zużywa dane z AppListCache (odświeżane
         raz na 5 s singletonem, nie per-picker).
+
+        V9: dopasowanie przez normalize_proc_name po OBU stronach — wpis
+        ``spotify.exe`` nie ostrzega gdy na liście jest ``spotify`` (i odwrotnie).
         """
         target = self._configured_target
         if not target:
             self._hint.setVisible(False)
             self._hint.setText("")
             return
-        running = {a.lower() for a in self._cached_apps}
-        if target.lower() in running:
+        running = {normalize_proc_name(a) for a in self._cached_apps}
+        if normalize_proc_name(target) in running:
             self._hint.setVisible(False)
             self._hint.setText("")
         else:

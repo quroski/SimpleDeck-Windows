@@ -68,8 +68,10 @@ class _PotCell(QFrame):
         self._last_value = -1  # V7: cache by pominąć identyczne setValue/setText
         self.setObjectName("deckCell")
         self.setProperty("selected", "false")
-        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        self.setFixedHeight(96)
+        # Skalowanie pionowe: komórka rośnie razem z oknem (pierwotnie
+        # setFixedHeight(96)), ale nie kurczy się poniżej 96 px.
+        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self.setMinimumHeight(96)
         self.setCursor(Qt.PointingHandCursor)
 
         lay = QVBoxLayout(self)
@@ -147,6 +149,9 @@ class _PotCell(QFrame):
             }
         """)
         lay.addWidget(self._bar)
+        # Przy rosnącej wysokości komórki content trzyma się góry zamiast
+        # rozstrzelać się po całej karcie.
+        lay.addStretch()
 
     # --- V1.0.3: rename ---
     @property
@@ -245,8 +250,9 @@ class _ButtonCell(QPushButton):
         self._label = ""          # V1.0.3: własna nazwa (pusta = domyślna)
         self._editing = False     # V1.0.3: tryb edycji nazwy aktywny?
         self.setObjectName("deckButton")
-        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        self.setFixedHeight(72)
+        # Skalowanie pionowe: jak _PotCell — rośnie z oknem, minimum 72 px.
+        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self.setMinimumHeight(72)
         # V1.0.3: była disabled (ArrowCursor) — teraz klikalna. NoFocus,
         # żeby spacja/tab nie wchodziła w interakcję z wirtualną "klawiaturą".
         self.setFocusPolicy(Qt.NoFocus)
@@ -306,6 +312,8 @@ class _ButtonCell(QPushButton):
         # każdym wciśnięciu (string concat + QSS re-parse).
         self._state_label.setStyleSheet(self._STATE_QSS_RELEASED)
         lay.addWidget(self._state_label)
+        # Jak w _PotCell — content przy górze gdy komórka urośnie.
+        lay.addStretch()
 
     _STATE_QSS_PRESSED = (
         "font-size: 11px; background: transparent; font-weight: 700; color: #2DD4FF;"
@@ -552,6 +560,8 @@ class DeckMap(QFrame):
             # V1.0.3: edycja nazwy w komórce → emit do profilu.
             cell.renamed.connect(self._on_label_renamed)
             self._pot_grid.addWidget(cell, 0, i)
+        # Skalowanie pionowe: rzęd komórek rośnie z oknem.
+        self._pot_grid.setRowStretch(0, 1)
         outer.addLayout(self._pot_grid)
 
         # === Przyciski (grid 4x1) ===
@@ -563,6 +573,8 @@ class DeckMap(QFrame):
             cell.activated.connect(self.button_clicked.emit)
             cell.renamed.connect(self._on_label_renamed)
             btn_grid.addWidget(cell, 0, i)
+        # Skalowanie pionowe: jak grid potów.
+        btn_grid.setRowStretch(0, 1)
         outer.addLayout(btn_grid)
 
         # === Subskrypcje EventBus ===
